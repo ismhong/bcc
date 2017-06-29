@@ -811,10 +811,12 @@ u64 bpf_ntohll(u64 val) {
   return __builtin_bswap64(val);
 }
 
+#ifdef __SIZEOF_INT128__
 static inline __attribute__((always_inline))
 unsigned __int128 bpf_ntoh128(unsigned __int128 val) {
   return (((unsigned __int128)bpf_ntohll(val) << 64) | (u64)bpf_ntohll(val >> 64));
 }
+#endif
 
 static inline __attribute__((always_inline))
 u16 bpf_htons(u16 val) {
@@ -831,10 +833,12 @@ u64 bpf_htonll(u64 val) {
   return bpf_ntohll(val);
 }
 
+#ifdef __SIZEOF_INT128__
 static inline __attribute__((always_inline))
 unsigned __int128 bpf_hton128(unsigned __int128 val) {
   return bpf_ntoh128(val);
 }
+#endif
 
 static inline __attribute__((always_inline))
 u64 load_dword(void *skb, u64 off) {
@@ -853,7 +857,9 @@ bpf_store_dword(void *skb, u64 off, u64 val) {
 }
 
 #define MASK(_n) ((_n) < 64 ? (1ull << (_n)) - 1 : ((u64)-1LL))
+#ifdef __SIZEOF_INT128__
 #define MASK128(_n) ((_n) < 128 ? ((unsigned __int128)1 << (_n)) - 1 : ((unsigned __int128)-1))
+#endif
 
 static inline __attribute__((always_inline))
 unsigned int bpf_log2(unsigned int v)
@@ -870,7 +876,7 @@ unsigned int bpf_log2(unsigned int v)
 }
 
 static inline __attribute__((always_inline))
-unsigned int bpf_log2l(unsigned long v)
+unsigned int bpf_log2l(unsigned long long v)
 {
   unsigned int hi = v >> 32;
   if (hi)
@@ -1015,6 +1021,9 @@ int bpf_usdt_readarg_p(int argc, struct pt_regs *ctx, void *buf, u64 len) asm("l
 #elif defined(__TARGET_ARCH_arm64)
 #define bpf_target_arm64
 #define bpf_target_defined
+#elif defined(__TARGET_ARCH_arm)
+#define bpf_target_arm
+#define bpf_target_defined
 #elif defined(__TARGET_ARCH_powerpc)
 #define bpf_target_powerpc
 #define bpf_target_defined
@@ -1080,6 +1089,18 @@ int bpf_usdt_readarg_p(int argc, struct pt_regs *ctx, void *buf, u64 len) asm("l
 #define PT_REGS_RC(x)		((x)->regs[0])
 #define PT_REGS_SP(x)		((x)->sp)
 #define PT_REGS_IP(x)		((x)->pc)
+#elif defined(bpf_target_arm)
+#define PT_REGS_PARM1(x)	((x)->uregs[0])
+#define PT_REGS_PARM2(x)	((x)->uregs[1])
+#define PT_REGS_PARM3(x)	((x)->uregs[2])
+#define PT_REGS_PARM4(x)	((x)->uregs[3])
+#define PT_REGS_PARM5(x)	((x)->uregs[4])
+#define PT_REGS_PARM6(x)	((x)->uregs[5])
+#define PT_REGS_RET(x)		((x)->uregs[14])
+#define PT_REGS_FP(x)		((x)->uregs[11])
+#define PT_REGS_RC(x)		((x)->uregs[0])
+#define PT_REGS_SP(x)		((x)->uregs[13])
+#define PT_REGS_IP(x)		((x)->uregs[15])
 #else
 #error "bcc does not support this platform yet"
 #endif

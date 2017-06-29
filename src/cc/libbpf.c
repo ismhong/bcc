@@ -63,6 +63,8 @@
 #define __NR_bpf 351
 #elif defined(__aarch64__)
 #define __NR_bpf 280
+#elif defined(__arm__)
+#define __NR_bpf 386
 #else
 #define __NR_bpf 321
 #endif

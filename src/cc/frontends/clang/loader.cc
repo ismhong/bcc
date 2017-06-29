@@ -270,6 +270,9 @@ void *get_clang_target_cb(bcc_arch_t arch)
     case BCC_ARCH_ARM64:
       ret = "aarch64-unknown-linux-gnu";
       break;
+    case BCC_ARCH_ARM:
+      ret = "armv7l-unknown-linux-gnueabi";
+      break;
     default:
       ret = "x86_64-unknown-linux-gnu";
   }

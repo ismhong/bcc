@@ -12,3 +12,6 @@ debian/**/*.log
 *critical.log
 obj-x86_64-linux-gnu
 examples/cgroupid/cgroupid
+GPATH
+GRTAGS
+GTAGS

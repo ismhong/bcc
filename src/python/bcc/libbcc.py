@@ -32,39 +32,39 @@ lib.bpf_module_license.restype = ct.c_char_p
 lib.bpf_module_license.argtypes = [ct.c_void_p]
 lib.bpf_module_kern_version.restype = ct.c_uint
 lib.bpf_module_kern_version.argtypes = [ct.c_void_p]
-lib.bpf_num_functions.restype = ct.c_ulonglong
+lib.bpf_num_functions.restype = ct.c_size_t
 lib.bpf_num_functions.argtypes = [ct.c_void_p]
 lib.bpf_function_name.restype = ct.c_char_p
-lib.bpf_function_name.argtypes = [ct.c_void_p, ct.c_ulonglong]
+lib.bpf_function_name.argtypes = [ct.c_void_p, ct.c_size_t]
 lib.bpf_function_start.restype = ct.c_void_p
 lib.bpf_function_start.argtypes = [ct.c_void_p, ct.c_char_p]
 lib.bpf_function_size.restype = ct.c_size_t
 lib.bpf_function_size.argtypes = [ct.c_void_p, ct.c_char_p]
-lib.bpf_table_id.restype = ct.c_ulonglong
+lib.bpf_table_id.restype = ct.c_size_t
 lib.bpf_table_id.argtypes = [ct.c_void_p, ct.c_char_p]
 lib.bpf_table_fd.restype = ct.c_int
 lib.bpf_table_fd.argtypes = [ct.c_void_p, ct.c_char_p]
 lib.bpf_table_type_id.restype = ct.c_int
-lib.bpf_table_type_id.argtypes = [ct.c_void_p, ct.c_ulonglong]
-lib.bpf_table_max_entries_id.restype = ct.c_ulonglong
-lib.bpf_table_max_entries_id.argtypes = [ct.c_void_p, ct.c_ulonglong]
+lib.bpf_table_type_id.argtypes = [ct.c_void_p, ct.c_size_t]
+lib.bpf_table_max_entries_id.restype = ct.c_size_t
+lib.bpf_table_max_entries_id.argtypes = [ct.c_void_p, ct.c_size_t]
 lib.bpf_table_flags_id.restype = ct.c_int
-lib.bpf_table_flags_id.argtypes = [ct.c_void_p, ct.c_ulonglong]
+lib.bpf_table_flags_id.argtypes = [ct.c_void_p, ct.c_size_t]
 lib.bpf_table_key_desc.restype = ct.c_char_p
 lib.bpf_table_key_desc.argtypes = [ct.c_void_p, ct.c_char_p]
 lib.bpf_table_leaf_desc.restype = ct.c_char_p
 lib.bpf_table_leaf_desc.argtypes = [ct.c_void_p, ct.c_char_p]
 lib.bpf_table_key_snprintf.restype = ct.c_int
-lib.bpf_table_key_snprintf.argtypes = [ct.c_void_p, ct.c_ulonglong,
-        ct.c_char_p, ct.c_ulonglong, ct.c_void_p]
+lib.bpf_table_key_snprintf.argtypes = [ct.c_void_p, ct.c_size_t,
+        ct.c_char_p, ct.c_size_t, ct.c_void_p]
 lib.bpf_table_leaf_snprintf.restype = ct.c_int
-lib.bpf_table_leaf_snprintf.argtypes = [ct.c_void_p, ct.c_ulonglong,
-        ct.c_char_p, ct.c_ulonglong, ct.c_void_p]
+lib.bpf_table_leaf_snprintf.argtypes = [ct.c_void_p, ct.c_size_t,
+        ct.c_char_p, ct.c_size_t, ct.c_void_p]
 lib.bpf_table_key_sscanf.restype = ct.c_int
-lib.bpf_table_key_sscanf.argtypes = [ct.c_void_p, ct.c_ulonglong,
+lib.bpf_table_key_sscanf.argtypes = [ct.c_void_p, ct.c_size_t,
         ct.c_char_p, ct.c_void_p]
 lib.bpf_table_leaf_sscanf.restype = ct.c_int
-lib.bpf_table_leaf_sscanf.argtypes = [ct.c_void_p, ct.c_ulonglong,
+lib.bpf_table_leaf_sscanf.argtypes = [ct.c_void_p, ct.c_size_t,
         ct.c_char_p, ct.c_void_p]
 lib.bpf_perf_event_fields.restype = ct.c_ulonglong
 lib.bpf_perf_event_fields.argtypes = [ct.c_void_p, ct.c_char_p]
