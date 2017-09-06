@@ -848,7 +848,7 @@ u64 load_dword(void *skb, u64 off) {
 void bpf_store_byte(void *skb, u64 off, u64 val) asm("llvm.bpf.store.byte");
 void bpf_store_half(void *skb, u64 off, u64 val) asm("llvm.bpf.store.half");
 void bpf_store_word(void *skb, u64 off, u64 val) asm("llvm.bpf.store.word");
-u64 bpf_pseudo_fd(u64, u64) asm("llvm.bpf.pseudo");
+void *bpf_pseudo_fd(u64, u64) asm("llvm.bpf.pseudo");
 
 static inline void __attribute__((always_inline))
 bpf_store_dword(void *skb, u64 off, u64 val) {
