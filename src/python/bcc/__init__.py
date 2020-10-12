@@ -309,7 +309,8 @@ class BPF(object):
         text = _assert_is_bytes(text)
 
         assert not (text and src_file)
-
+ 
+        self.BCC_PERF_TRANSLATOR = 0
         self.kprobe_fds = {}
         self.uprobe_fds = {}
         self.tracepoint_fds = {}
@@ -1019,8 +1020,11 @@ class BPF(object):
 
     def _attach_perf_event(self, progfd, ev_type, ev_config,
             sample_period, sample_freq, pid, cpu, group_fd):
+        print(progfd, ev_type, ev_config, sample_period, sample_freq, pid, cpu)
+        period = ct.c_longlong(sample_period)
+        freq = ct.c_longlong(sample_freq)
         res = lib.bpf_attach_perf_event(progfd, ev_type, ev_config,
-                sample_period, sample_freq, pid, cpu, group_fd)
+                period, freq, pid, cpu, group_fd)
         if res < 0:
             raise Exception("Failed to attach BPF to perf event")
         return res
@@ -1146,7 +1150,9 @@ class BPF(object):
         self._check_probe_quota(1)
         fn = self.load_func(fn_name, BPF.KPROBE)
         ev_name = self._get_uprobe_evname(b"p", path, addr, pid)
-        fd = lib.bpf_attach_uprobe(fn.fd, 0, ev_name, path, addr, pid)
+        addr_converted = ct.c_ulonglong(addr)
+        fd = lib.bpf_attach_uprobe(fn.fd, 0, ev_name, path, addr_converted, pid)
+        print(fn.fd, ev_name, path, addr, pid, fd)
         if fd < 0:
             raise Exception("Failed to attach BPF to uprobe")
         self._add_uprobe_fd(ev_name, fd)
