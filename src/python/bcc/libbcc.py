@@ -66,7 +66,7 @@ lib.bpf_table_key_sscanf.argtypes = [ct.c_void_p, ct.c_size_t,
 lib.bpf_table_leaf_sscanf.restype = ct.c_int
 lib.bpf_table_leaf_sscanf.argtypes = [ct.c_void_p, ct.c_size_t,
         ct.c_char_p, ct.c_void_p]
-lib.bpf_perf_event_fields.restype = ct.c_ulonglong
+lib.bpf_perf_event_fields.restype = ct.c_size_t
 lib.bpf_perf_event_fields.argtypes = [ct.c_void_p, ct.c_char_p]
 lib.bpf_perf_event_field.restype = ct.c_char_p
 lib.bpf_perf_event_field.argtypes = [ct.c_void_p, ct.c_char_p, ct.c_ulonglong]
