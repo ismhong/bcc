@@ -980,7 +980,7 @@ static int create_probe_event(char *buf, const char *ev_name,
                ev_alias, config1);
   } else {
     res = snprintf(buf, PATH_MAX, "%c:%ss/%s %s:0x%"PRIx64, attach_type==BPF_PROBE_ENTRY ? 'p' : 'r',
-                   event_type, ev_alias, config1, (unsigned long)offset);
+                   event_type, ev_alias, config1, (unsigned long long)offset);
     if (res < 0 || res >= PATH_MAX) {
       fprintf(stderr, "Event alias (%s) too long for buffer\n", ev_alias);
       close(kfd);
