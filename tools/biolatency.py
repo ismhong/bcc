@@ -110,8 +110,11 @@ if args.disks:
     bpf_text = bpf_text.replace('STORAGE',
         'BPF_HISTOGRAM(dist, disk_key_t);')
     bpf_text = bpf_text.replace('STORE',
-        'disk_key_t key = {.slot = bpf_log2l(delta)}; ' +
-        'void *__tmp = (void *)req->rq_disk->disk_name; ' +
+        'disk_key_t key; ' +
+        'key.slot = bpf_log2l(delta); ' +
+        'struct gendisk *disk = req->rq_disk; \n' +
+        'char *name = disk->disk_name; ' +
+        'void *__tmp = disk->disk_name; ' +
         'bpf_probe_read_kernel(&key.disk, sizeof(key.disk), __tmp); ' +
         'dist.increment(key);')
 elif args.flags:

@@ -550,24 +550,30 @@ bool ProbeVisitor::VisitMemberExpr(MemberExpr *E) {
 
   // Checks to see if the expression references something that needs to be run
   // through bpf_probe_read.
-  if (!ProbeChecker(base, ptregs_, track_helpers_).needs_probe())
+  string ahs = rewriter_.getRewrittenText(expansionRange(SourceRange(GET_BEGINLOC(base), GET_ENDLOC(E))));
+  if (!ProbeChecker(base, ptregs_, track_helpers_).needs_probe()) {
+    //fprintf(stdout, "\033[1;33m[%s] didn't need rewrite\033[0m\n", ahs.c_str());
     return true;
+  } else {
+    //fprintf(stdout, "\033[1;35m[%s] need rewrite\033[0m\n", ahs.c_str());
+  }
 
   // If the base is an array, we will skip rewriting. See issue #2352.
-  if (E->getType()->isArrayType())
-    return true;
+  //if (E->getType()->isArrayType())
+    //return true;
 
+  string lhs = rewriter_.getRewrittenText(expansionRange(SourceRange(GET_BEGINLOC(base), GET_ENDLOC(base))));
   string rhs = rewriter_.getRewrittenText(expansionRange(SourceRange(rhs_start, GET_ENDLOC(E))));
   string base_type = base->getType()->getPointeeType().getAsString();
+  string address = "addr_of_member(" + base_type + ", " + lhs + ", " + rhs + ")";
   string pre, post;
   pre = "({ typeof(" + E->getType().getAsString() + ") _val; __builtin_memset(&_val, 0, sizeof(_val));";
   if (has_overlap_kuaddr_)
-    pre += " bpf_probe_read_kernel(&_val, sizeof(_val), (u64)&";
+    pre += " bpf_probe_read_kernel(&_val, sizeof(_val), (u64)";
   else
-    pre += " bpf_probe_read(&_val, sizeof(_val), (u64)&";
-  post = rhs + "); _val; })";
-  rewriter_.InsertText(expansionLoc(GET_BEGINLOC(E)), pre);
-  rewriter_.ReplaceText(expansionRange(SourceRange(member, GET_ENDLOC(E))), post);
+    pre += " bpf_probe_read(&_val, sizeof(_val), (u64)";
+  post = address + "); _val; })";
+  rewriter_.ReplaceText(expansionRange(SourceRange(GET_BEGINLOC(base), GET_ENDLOC(E))), pre + post);
   return true;
 }
 bool ProbeVisitor::VisitArraySubscriptExpr(ArraySubscriptExpr *E) {
