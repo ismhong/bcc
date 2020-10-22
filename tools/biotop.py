@@ -128,8 +128,9 @@ int trace_req_completion(struct pt_regs *ctx, struct request *req)
 
     // setup info_t key
     struct info_t info = {};
-    info.major = req->rq_disk->major;
-    info.minor = req->rq_disk->first_minor;
+    struct gendisk *disk = req->rq_disk;
+    info.major = disk->major;
+    info.minor = disk->first_minor;
 /*
  * The following deals with a kernel version change (in mainline 4.7, although
  * it may be backported to earlier kernels) with how block request write flags
