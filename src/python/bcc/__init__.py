@@ -1020,7 +1020,6 @@ class BPF(object):
 
     def _attach_perf_event(self, progfd, ev_type, ev_config,
             sample_period, sample_freq, pid, cpu, group_fd):
-        print(progfd, ev_type, ev_config, sample_period, sample_freq, pid, cpu)
         period = ct.c_longlong(sample_period)
         freq = ct.c_longlong(sample_freq)
         res = lib.bpf_attach_perf_event(progfd, ev_type, ev_config,
