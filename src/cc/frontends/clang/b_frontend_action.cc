@@ -567,7 +567,10 @@ bool ProbeVisitor::VisitMemberExpr(MemberExpr *E) {
   string base_type = base->getType()->getPointeeType().getAsString();
   string address = "addr_of_member(" + base_type + ", " + lhs + ", " + rhs + ")";
   string pre, post;
-  pre = "({ typeof(" + E->getType().getAsString() + ") _val; __builtin_memset(&_val, 0, sizeof(_val));";
+  if (E->getType()->isAnyPointerType())
+    pre = "({ typeof(" + E->getType().getAsString() + ") _val = 0;";
+  else
+    pre = "({ typeof(" + E->getType().getAsString() + ") _val; __builtin_memset(&_val, 0, sizeof(_val));";
   if (has_overlap_kuaddr_)
     pre += " bpf_probe_read_kernel(&_val, sizeof(_val), (u64)";
   else
