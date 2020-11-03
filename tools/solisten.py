@@ -86,7 +86,8 @@ int kprobe__inet_listen(struct pt_regs *ctx, struct socket *sock, int backlog)
         bpf_get_current_comm(evt.task, TASK_COMM_LEN);
 
         // Get socket IP family
-        u16 family = sk->__sk_common.skc_family;
+        struct sock_common *psc = &sk->__sk_common;
+        u16 family = psc->skc_family;
         evt.proto = family << 16 | SOCK_STREAM;
 
         // Get PID
@@ -100,7 +101,9 @@ int kprobe__inet_listen(struct pt_regs *ctx, struct socket *sock, int backlog)
 
         // Get network namespace id, if kernel supports it
 #ifdef CONFIG_NET_NS
-        evt.netns = sk->__sk_common.skc_net.net->ns.inum;
+        possible_net_t *pskcnet = &psc->skc_net;
+        struct net *pnet = pskcnet->net;
+        evt.netns = pnet->ns.inum;
 #else
         evt.netns = 0;
 #endif

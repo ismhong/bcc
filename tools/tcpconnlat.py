@@ -94,8 +94,8 @@ BPF_PERF_OUTPUT(ipv4_events);
 struct ipv6_data_t {
     u64 ts_us;
     u32 pid;
-    unsigned __int128 saddr;
-    unsigned __int128 daddr;
+    u64 saddr[2];
+    u64 daddr[2];
     u64 ip;
     u16 dport;
     u64 delta_us;
@@ -105,7 +105,7 @@ BPF_PERF_OUTPUT(ipv6_events);
 
 int trace_connect(struct pt_regs *ctx, struct sock *sk)
 {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    u32 pid = bpf_get_current_pid_tgid();
     FILTER
     struct info_t info = {.pid = pid};
     info.ts = bpf_ktime_get_ns();
@@ -121,7 +121,8 @@ int trace_connect(struct pt_regs *ctx, struct sock *sk)
 int trace_tcp_rcv_state_process(struct pt_regs *ctx, struct sock *skp)
 {
     // will be in TCP_SYN_SENT for handshake
-    if (skp->__sk_common.skc_state != TCP_SYN_SENT)
+    struct sock_common *psc = &skp->__sk_common;
+    if (psc->skc_state != TCP_SYN_SENT)
         return 0;
 
     // check start and calculate delta
@@ -158,16 +159,18 @@ int trace_tcp_rcv_state_process(struct pt_regs *ctx, struct sock *skp)
         ipv4_events.perf_submit(ctx, &data4, sizeof(data4));
 
     } else /* AF_INET6 */ {
+    #if 0
         struct ipv6_data_t data6 = {.pid = infop->pid, .ip = 6};
         data6.ts_us = now / 1000;
-        bpf_probe_read_kernel(&data6.saddr, sizeof(data6.saddr),
+        bpf_probe_read(&data6.saddr, sizeof(data6.saddr),
             skp->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr32);
-        bpf_probe_read_kernel(&data6.daddr, sizeof(data6.daddr),
+        bpf_probe_read(&data6.daddr, sizeof(data6.daddr),
             skp->__sk_common.skc_v6_daddr.in6_u.u6_addr32);
         data6.dport = ntohs(dport);
         data6.delta_us = delta_us;
         __builtin_memcpy(&data6.task, infop->task, sizeof(data6.task));
         ipv6_events.perf_submit(ctx, &data6, sizeof(data6));
+    #endif
     }
 
     start.delete(&skp);

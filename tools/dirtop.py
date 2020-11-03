@@ -91,18 +91,20 @@ static int do_entry(struct pt_regs *ctx, struct file *file,
     // The directory inodes we look at
     u32 dir_ids[INODES_NUMBER] =  DIRECTORY_INODES;
     struct info_t info = {.inode_id = 0};
-    struct dentry *pde = file->f_path.dentry;
+    struct path *pfp = &file->f_path;
+    struct dentry *pde = pfp->dentry;
     for (int i=0; i<50; i++) {
         // If we don't have any parent, we reached the root
         if (!pde->d_parent) {
             break;
         }
         pde = pde->d_parent;
+        struct inode *pdi = pde->d_inode;
         // Does the files is part of the directory we look for
         for(int dir_id=0; dir_id<INODES_NUMBER; dir_id++) {
-            if (pde->d_inode->i_ino == dir_ids[dir_id]) {
+            if (pdi->i_ino == dir_ids[dir_id]) {
                 // Yes, let's export the top directory inode
-                info.inode_id = pde->d_inode->i_ino;
+                info.inode_id = pdi->i_ino;
                 break;
             }
         }
@@ -148,7 +150,10 @@ def get_searched_ids(root_directories):
     inodes = "{"
     total_dirs = 0
     for root_directory in root_directories.split(','):
-        searched_dirs = glob(root_directory, recursive=True)
+        try:
+             searched_dirs = glob(root_directory, recursive=True)
+        except TypeError:
+             searched_dirs = glob(root_directory)
         if not searched_dirs:
             continue
 

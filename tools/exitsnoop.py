@@ -118,6 +118,7 @@ def _embedded_c(args):
     TRACEPOINT_PROBE(sched, sched_process_exit)
     {
         struct task_struct *task = (typeof(task))bpf_get_current_task();
+        struct task_struct __rcu *pparent = task->parent;
         if (FILTER_PID || FILTER_EXIT_CODE) { return 0; }
 
         struct data_t data = {
@@ -125,7 +126,7 @@ def _embedded_c(args):
             .exit_time = bpf_ktime_get_ns(),
             .pid = task->tgid,
             .tid = task->pid,
-            .ppid = task->parent->tgid,
+            .ppid = pparent->tgid,
             .exit_code = task->exit_code >> 8,
             .sig_info = task->exit_code & 0xFF,
         };

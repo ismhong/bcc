@@ -7,7 +7,7 @@
 # This provides information such as packet details, socket state, and kernel
 # stack trace for packets/segments that were dropped via tcp_drop().
 #
-# USAGE: tcpdrop [-h]
+# USAGE: tcpdrop [-c] [-h] [-l]
 #
 # This uses dynamic tracing of kernel functions, and will need to be updated
 # to match kernel changes.
@@ -66,8 +66,8 @@ BPF_PERF_OUTPUT(ipv4_events);
 struct ipv6_data_t {
     u32 pid;
     u64 ip;
-    unsigned __int128 saddr;
-    unsigned __int128 daddr;
+    u64 saddr[2];
+    u64 daddr[2];
     u16 sport;
     u16 dport;
     u8 state;
@@ -128,9 +128,9 @@ int trace_tcp_drop(struct pt_regs *ctx, struct sock *sk, struct sk_buff *skb)
         struct ipv6_data_t data6 = {};
         data6.pid = pid;
         data6.ip = 6;
-        bpf_probe_read_kernel(&data6.saddr, sizeof(data6.saddr),
+        bpf_probe_read(&data6.saddr, sizeof(data6.saddr),
             sk->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr32);
-        bpf_probe_read_kernel(&data6.daddr, sizeof(data6.daddr),
+        bpf_probe_read(&data6.daddr, sizeof(data6.daddr),
             sk->__sk_common.skc_v6_daddr.in6_u.u6_addr32);
         data6.dport = dport;
         data6.sport = sport;

@@ -74,13 +74,14 @@ BPF_PERF_OUTPUT(events);
 int kprobe__tty_write(struct pt_regs *ctx, struct file *file,
     const char __user *buf, size_t count)
 {
-    if (file->f_inode->i_ino != PTS)
+    struct inode *pfi = file->f_inode;
+    if (pfi->i_ino != PTS)
         return 0;
 
-    // bpf_probe_read_user() can only use a fixed size, so truncate to count
+    // bpf_probe_read() can only use a fixed size, so truncate to count
     // in user space:
     struct data_t data = {};
-    bpf_probe_read_user(&data.buf, BUFSIZE, (void *)buf);
+    bpf_probe_read(&data.buf, BUFSIZE, (void *)buf);
     if (count > BUFSIZE)
         data.count = BUFSIZE;
     else

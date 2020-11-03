@@ -125,7 +125,7 @@ BPF_PERF_OUTPUT(ipv4_bind_events);
 
 struct ipv6_bind_data_t {
     // int128 would be aligned on 16 bytes boundary, better to go first
-    unsigned __int128 saddr;
+    u64 saddr[2];
     u64 ts_us;
     u32 pid;
     u32 uid;
@@ -147,7 +147,7 @@ struct ipv4_flow_key_t {
 BPF_HASH(ipv4_count, struct ipv4_flow_key_t);
 
 struct ipv6_flow_key_t {
-    unsigned __int128 saddr;
+    u64 saddr[2];
     u16 sport;
 };
 BPF_HASH(ipv6_count, struct ipv6_flow_key_t);
