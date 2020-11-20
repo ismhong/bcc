@@ -143,7 +143,8 @@ static inline field_kind_t _get_field_kind(std::string const& line,
         field_type == "int8_t" || field_type == "int16_t")
       field_type = "s32";
     if (field_type == "unsigned char" || field_type == "unsigned short" ||
-        field_type == "uint8_t" || field_type == "uint16_t")
+        field_type == "uint8_t" || field_type == "uint16_t" ||
+        field_type.find("*") != std::string::npos)
       field_type = "u32";
   } else if (size == 8) {
     if (field_type == "char" || field_type == "short" || field_type == "int" ||
