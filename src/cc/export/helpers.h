@@ -51,7 +51,7 @@ R"********(
 #include <uapi/linux/if_packet.h>
 #include <linux/version.h>
 #include <linux/log2.h>
-#include <asm/page.h>
+//#include <asm/page.h>
 
 #ifndef CONFIG_BPF_SYSCALL
 #error "CONFIG_BPF_SYSCALL is undefined, please check your .config or ask your Linux distro to enable this feature"
