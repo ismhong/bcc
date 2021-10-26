@@ -62,11 +62,6 @@ debug = 0
 
 # define BPF program
 bpf_text = """
-#include <uapi/linux/ptrace.h>
-#include <linux/irq.h>
-#include <linux/irqdesc.h>
-#include <linux/interrupt.h>
-
 typedef struct irq_key {
     char name[32];
     u64 slot;
