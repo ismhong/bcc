@@ -215,8 +215,11 @@ KRETFUNC_PROBE(FNNAME, struct pt_regs *regs, int ret)
 {
     int dfd = PT_REGS_PARM1(regs);
     const char __user *filename = (char *)PT_REGS_PARM2(regs);
-    struct open_how __user *how = (struct open_how *)PT_REGS_PARM3(regs);
-    int flags = how->flags;
+    struct open_how __user how;
+    int flags;
+
+    bpf_probe_read_user(&how, sizeof(struct open_how), (struct open_how*)PT_REGS_PARM3(regs));
+    flags = how.flags;
 #else
 KRETFUNC_PROBE(FNNAME, int dfd, const char __user *filename, struct open_how __user *how, int ret)
 {
@@ -262,6 +265,17 @@ fnname_openat = b.get_syscall_prefix().decode() + 'openat'
 fnname_openat2 = b.get_syscall_prefix().decode() + 'openat2'
 if b.ksymname(fnname_openat2) == -1:
     fnname_openat2 = None
+
+# For compat syscall
+fnname_compat_open = b.get_syscall_prefix().decode().replace('sys_', 'compat_sys_') + 'open'
+if b.ksymname(fnname_compat_open) == -1:
+    fnname_compat_open = None
+fnname_compat_openat = b.get_syscall_prefix().decode().replace('sys_', 'compat_sys_') + 'openat'
+if b.ksymname(fnname_compat_openat) == -1:
+    fnname_compat_openat = None
+fnname_compat_openat2 = b.get_syscall_prefix().decode().replace('sys_', 'compat_sys_') + 'openat2'
+if b.ksymname(fnname_compat_openat2) == -1:
+    fnname_compat_openat2 = None
 
 is_support_kfunc = BPF.support_kfunc()
 if is_support_kfunc:
@@ -326,6 +340,19 @@ if not is_support_kfunc:
     if fnname_openat2:
         b.attach_kprobe(event=fnname_openat2, fn_name="syscall__trace_entry_openat2")
         b.attach_kretprobe(event=fnname_openat2, fn_name="trace_return")
+
+    # For compat syscall
+    if fnname_compat_open:
+        b.attach_kprobe(event=fnname_compat_open, fn_name="syscall__trace_entry_open")
+        b.attach_kretprobe(event=fnname_compat_open, fn_name="trace_return")
+
+    if fnname_compat_openat:
+        b.attach_kprobe(event=fnname_compat_openat, fn_name="syscall__trace_entry_openat")
+        b.attach_kretprobe(event=fnname_compat_openat, fn_name="trace_return")
+
+    if fnname_compat_openat2:
+        b.attach_kprobe(event=fnname_compat_openat2, fn_name="syscall__trace_entry_openat2")
+        b.attach_kretprobe(event=fnname_compat_openat2, fn_name="trace_return")
 
 initial_ts = 0
 
