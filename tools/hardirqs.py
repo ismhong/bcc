@@ -80,7 +80,7 @@ bpf_text_count = """
 TRACEPOINT_PROBE(irq, irq_handler_entry)
 {
     irq_key_t key = {.slot = 0 /* ignore */};
-    TP_DATA_LOC_READ_CONST(&key.name, name, sizeof(key.name));
+    TP_DATA_LOC_READ_STR(&key.name, name, sizeof(key.name));
     dist.atomic_increment(key);
     return 0;
 }
@@ -93,7 +93,7 @@ TRACEPOINT_PROBE(irq, irq_handler_entry)
     u64 ts = bpf_ktime_get_ns();
     irq_name_t name = {};
 
-    TP_DATA_LOC_READ_CONST(&name.name, name, sizeof(name));
+    TP_DATA_LOC_READ_STR(&name.name, name, sizeof(name));
     irqnames.update(&tid, &name);
     start.update(&tid, &ts);
     return 0;
