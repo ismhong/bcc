@@ -1177,6 +1177,12 @@ static int ____##name(unsigned long long *ctx, ##args)
             bpf_probe_read((void *)dst, __length, (char *)args + __offset); \
         } while (0);
 
+#define TP_DATA_LOC_READ_STR(dst, field, length)                                \
+        do {                                                                    \
+            unsigned short __offset = args->data_loc_##field & 0xFFFF;          \
+            bpf_probe_read_str((void *)dst, length, (char *)args + __offset);   \
+        } while (0);
+
 #define offset_of(type, member) ((size_t)(&((type *)0)->member))
 #define addr_of_member(type, ptr, member) ((size_t)ptr + offset_of(type, member))
 #endif
