@@ -18,6 +18,12 @@ const volatile pid_t filter_pid = 0;
 #define AF_INET		2
 #define AF_INET6	10
 
+/* Macro to define IPv6 address is zero */
+#define IN6_ADDR_U32_IS_ZERO(val) ((((val).in6_u.u6_addr32)[0] == 0) && \
+                                   (((val).in6_u.u6_addr32)[1] == 0) && \
+                                   (((val).in6_u.u6_addr32)[2] == 0) && \
+                                   (((val).in6_u.u6_addr32)[3] == 0))
+#define IN6_ADDR_IS_ZERO IN6_ADDR_U32_IS_ZERO
 /*
  * tcp_set_state doesn't run in the context of the process that initiated the
  * connection so we need to store a map TUPLE -> PID to send the right PID on
@@ -26,11 +32,11 @@ const volatile pid_t filter_pid = 0;
 struct tuple_key_t {
 	union {
 		__u32 saddr_v4;
-		unsigned __int128 saddr_v6;
+		struct in6_addr saddr_v6;
 	};
 	union {
 		__u32 daddr_v4;
-		unsigned __int128 daddr_v6;
+		struct in6_addr daddr_v6;
 	};
 	u16 sport;
 	u16 dport;
@@ -85,11 +91,11 @@ fill_tuple(struct tuple_key_t *tuple, struct sock *sk, int family)
 	case AF_INET6:
 		BPF_CORE_READ_INTO(&tuple->saddr_v6, sk,
 				   __sk_common.skc_v6_rcv_saddr.in6_u.u6_addr32);
-		if (tuple->saddr_v6 == 0)
+		if (IN6_ADDR_IS_ZERO(tuple->saddr_v6))
 			return false;
 		BPF_CORE_READ_INTO(&tuple->daddr_v6, sk,
 				   __sk_common.skc_v6_daddr.in6_u.u6_addr32);
-		if (tuple->daddr_v6 == 0)
+		if (IN6_ADDR_IS_ZERO(tuple->daddr_v6))
 			return false;
 
 		break;
@@ -319,7 +325,7 @@ int BPF_KRETPROBE(exit_inet_csk_accept, struct sock *sk)
 	fill_tuple(&t, sk, family);
 	t.sport = bpf_ntohs(sport);
 	/* do not send event if IP address is 0.0.0.0 or port is 0 */
-	if (t.saddr_v6 == 0 || t.daddr_v6 == 0 || t.dport == 0 || t.sport == 0)
+	if (IN6_ADDR_IS_ZERO(t.saddr_v6)|| IN6_ADDR_IS_ZERO(t.daddr_v6) || t.dport == 0 || t.sport == 0)
 		return 0;
 
 	fill_event(&t, &event, pid, uid, family, TCP_EVENT_TYPE_ACCEPT);

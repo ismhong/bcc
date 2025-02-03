@@ -21,11 +21,11 @@ enum event_type {
 struct event {
 	union {
 		__u32 saddr_v4;
-		unsigned __int128 saddr_v6;
+		struct in6_addr saddr_v6;
 	};
 	union {
 		__u32 daddr_v4;
-		unsigned __int128 daddr_v6;
+		struct in6_addr daddr_v6;
 	};
 	char task[TASK_COMM_LEN];
 	__u64 ts_us;
