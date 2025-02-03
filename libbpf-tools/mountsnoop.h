@@ -7,7 +7,7 @@
 #define DATA_LEN	512
 #define PATH_MAX	4096
 
-enum op {
+enum mount_op {
 	OP_MIN, /* skip 0 */
 	MOUNT,
 	UMOUNT,
@@ -62,7 +62,7 @@ union sys_arg {
 
 struct arg {
 	__u64 ts;
-	enum op op;
+	enum mount_op op;
 	union sys_arg sys;
 };
 
@@ -72,7 +72,7 @@ struct event {
 	__u32 tid;
 	unsigned int mnt_ns;
 	int ret;
-	enum op op;
+	enum mount_op op;
 	char comm[TASK_COMM_LEN];
 	union {
 		/* op=MOUNT */

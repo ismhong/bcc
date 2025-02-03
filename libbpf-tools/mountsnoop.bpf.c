@@ -19,7 +19,8 @@ struct {
 	__type(value, struct arg);
 } args SEC(".maps");
 
-static int probe_entry(union sys_arg *sys_arg, enum op op)
+static int probe_entry(union sys_arg *sys_arg, enum mount_op op)
+
 {
 	__u64 pid_tgid = bpf_get_current_pid_tgid();
 	__u32 pid = pid_tgid >> 32;
