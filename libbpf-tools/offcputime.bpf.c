@@ -16,7 +16,7 @@ const volatile __u64 max_block_ns = -1;
 const volatile __u64 min_block_ns = 1;
 const volatile bool filter_by_tgid = false;
 const volatile bool filter_by_pid = false;
-const volatile long state = -1;
+const volatile long long state = -1;
 
 struct internal_key {
 	u64 start_ts;
