@@ -46,7 +46,11 @@ void tracepoint__syscalls__sys_enter_msync(struct trace_event_raw_sys_enter *ctx
 	__syscall(ctx, SYS_MSYNC);
 }
 
-SEC("tracepoint/syscalls/sys_enter_sync_file_range")
+/* In some systems, the sys_enter_sync_file_range call is not included.
+   Instead, they use a register-saving version (sys_enter_sync_file_range2)
+   to prevent excessive usage of syscall registers.
+*/
+SEC("tracepoint/syscalls/sys_enter_sync_file_range2")
 void tracepoint__syscalls__sys_enter_sync_file_range(struct trace_event_raw_sys_enter *ctx)
 {
 	__syscall(ctx, SYS_SYNC_FILE_RANGE);
