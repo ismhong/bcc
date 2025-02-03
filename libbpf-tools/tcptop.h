@@ -5,8 +5,8 @@
 #define TASK_COMM_LEN 16
 
 struct ip_key_t {
-	unsigned __int128 saddr;
-	unsigned __int128 daddr;
+	struct in6_addr saddr;
+	struct in6_addr daddr;
 	__u32 pid;
 	char name[TASK_COMM_LEN];
 	__u16 lport;
