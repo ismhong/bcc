@@ -23,7 +23,7 @@ struct internal_rqinfo {
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, MAX_ENTRIES);
-	__type(key, struct request *);
+	__type(key, u32);
 	__type(value, struct internal_rqinfo);
 } rqinfos SEC(".maps");
 
@@ -104,13 +104,13 @@ int BPF_KPROBE(blk_account_io_merge_bio, struct request *rq)
 	return trace_start(ctx, rq, true);
 }
 
-SEC("fentry/blk_account_io_start")
+SEC("kprobe/blk_account_io_start")
 int BPF_PROG(blk_account_io_start, struct request *rq)
 {
 	return trace_start(ctx, rq, false);
 }
 
-SEC("fentry/blk_account_io_done")
+SEC("kprobe/blk_account_io_done")
 int BPF_PROG(blk_account_io_done, struct request *rq)
 {
 	return trace_done(ctx, rq);
