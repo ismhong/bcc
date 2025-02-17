@@ -66,7 +66,7 @@ struct value {
 	__u64 type_id;
 	__u64 flags;
 	__u64 predicate_value;
-};
+}; 
 
 struct func {
 	char name[MAX_NAME];
@@ -93,10 +93,10 @@ struct trace_data {
 
 struct trace {
 	/* initial values are readonly in tracing context */
-	struct btf *btf;
-	struct btf_dump *dump;
+	__u32 btf;
+	__u32 dump;
 	struct func func;
-	struct bpf_link *links[2];
+	__u32 links[2];
 	__u8 nr_traces;
 	__u32 filter_pid;
 	__u64 prev_ip; /* these are used in stack-mode tracing */

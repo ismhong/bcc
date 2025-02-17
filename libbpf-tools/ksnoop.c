@@ -519,7 +519,7 @@ static int parse_trace(char *str, struct trace *trace)
 	if (filter_pid)
 		p_debug("Using pid %lu as filter", trace->filter_pid);
 
-	trace->btf = vmlinux_btf;
+	trace->btf = (__u32) vmlinux_btf;
 
 	ret = sscanf(tracestr, VALID_NAME "(" ARGDATA ")", func->name, argdata);
 	if (ret <= 0)
@@ -546,7 +546,7 @@ static int parse_trace(char *str, struct trace *trace)
 		p_err("could not get address of '%s'", func->name);
 		return ret;
 	}
-	trace->btf = get_btf(func->mod);
+	trace->btf = (__u32) get_btf(func->mod);
 	if (!trace->btf) {
 		ret = -errno;
 		p_err("could not get BTF for '%s': %s",
@@ -554,14 +554,14 @@ static int parse_trace(char *str, struct trace *trace)
 		      strerror(-ret));
 		return -ENOENT;
 	}
-	trace->dump = btf_dump__new(trace->btf, trace_printf, NULL, NULL);
+	trace->dump = (__u32) btf_dump__new((struct btf*)(trace->btf), trace_printf, NULL, NULL);
 	if (!trace->dump) {
 		ret = -errno;
 		p_err("could not create BTF dump : %s", strerror(-ret));
 		return -EINVAL;
 	}
 
-	ret = get_func_btf(trace->btf, func);
+	ret = get_func_btf((struct btf*) (trace->btf), func);
 	if (ret) {
 		p_debug("unexpected return value '%d' getting function", ret);
 		return ret;
@@ -594,7 +594,7 @@ static int parse_trace(char *str, struct trace *trace)
 			      MAX_TRACES);
 			return -EINVAL;
 		}
-		if (trace_to_value(trace->btf, func, argname, membername,
+		if (trace_to_value((struct btf*) trace->btf, func, argname, membername,
 				   predicate, &trace->traces[i]))
 			return -EINVAL;
 
@@ -676,13 +676,13 @@ static int cmd_info(int argc, char **argv)
 		struct func *func = &traces[i].func;
 
 		printf("%s%s(",
-		       value_to_str(traces[i].btf, &func->args[KSNOOP_RETURN],
+		       value_to_str((struct btf*)traces[i].btf, &func->args[KSNOOP_RETURN],
 				    str),
 		       func->name);
 		for (j = 0; j < func->nr_args; j++) {
 			if (j > 0)
 				printf(", ");
-			printf("%s", value_to_str(traces[i].btf, &func->args[j],
+			printf("%s", value_to_str((struct btf*)traces[i].btf, &func->args[j],
 						  str));
 		}
 		if (func->nr_args > MAX_ARGS)
@@ -744,14 +744,14 @@ static void trace_handler(void *ctx, int cpu, void *data, __u32 size)
 			printf("%36s /* Cannot show '%s' as '%s%s'; invalid/userspace ptr? */\n",
 			       "",
 			       val->name,
-			       type_id_to_str(trace->btf,
+			       type_id_to_str((struct btf*) trace->btf,
 					      val->type_id,
 					      typestr),
 			       val->flags & KSNOOP_F_PTR ?
 			       " *" : "");
 		} else {
 			ret = btf_dump__dump_type_data
-				(trace->dump, val->type_id,
+				((struct btf_dump*)trace->dump, val->type_id,
 				 trace->buf + data->buf_offset,
 				 data->buf_len, &opts);
 			/* truncated? */
@@ -813,11 +813,13 @@ static int attach_traces(struct ksnoop_bpf *skel, struct trace *traces,
 	int i, ret;
 
 	for (i = 0; i < nr_traces; i++) {
-		traces[i].links[0] =
+		struct bpf_link **bpf_link_arr = (struct bpf_link **)( (void *) &traces[i].links[0] );
+
+		bpf_link_arr[0] =
 			bpf_program__attach_kprobe(skel->progs.kprobe_entry,
 						   false,
 						   traces[i].func.name);
-		if (!traces[i].links[0]) {
+		if (!bpf_link_arr[0]) {
 			ret = -errno;
 			p_err("Could not attach kprobe to '%s': %s",
 			      traces[i].func.name, strerror(-ret));
@@ -825,11 +827,11 @@ static int attach_traces(struct ksnoop_bpf *skel, struct trace *traces,
 		}
 		p_debug("Attached kprobe for '%s'", traces[i].func.name);
 
-		traces[i].links[1] =
+		bpf_link_arr[1] = 
 			bpf_program__attach_kprobe(skel->progs.kprobe_return,
 						   true,
 						   traces[i].func.name);
-		if (!traces[i].links[1]) {
+		if (!bpf_link_arr[1]) {
 			ret = -errno;
 			p_err("Could not attach kretprobe to '%s': %s",
 			      traces[i].func.name, strerror(-ret));
@@ -908,8 +910,8 @@ static int cmd_trace(int argc, char **argv)
 
 cleanup:
 	for (i = 0; i < nr_traces; i++) {
-		bpf_link__destroy(traces[i].links[0]);
-		bpf_link__destroy(traces[i].links[1]);
+		bpf_link__destroy((struct bpf_link*)(traces[i].links[0]));
+		bpf_link__destroy((struct bpf_link*)(traces[i].links[1]));
 	}
 	free(traces);
 	perf_buffer__free(pb);

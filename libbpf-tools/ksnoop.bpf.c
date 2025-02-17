@@ -293,8 +293,10 @@ static __u64 get_arg(struct pt_regs *ctx, enum arg argnum)
 		return PT_REGS_PARM3_CORE(ctx);
 	case KSNOOP_ARG4:
 		return PT_REGS_PARM4_CORE(ctx);
+#ifndef bpf_target_arm
 	case KSNOOP_ARG5:
 		return PT_REGS_PARM5_CORE(ctx);
+#endif
 	case KSNOOP_RETURN:
 		return PT_REGS_RC_CORE(ctx);
 	default:
