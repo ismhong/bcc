@@ -23,7 +23,7 @@ struct create_arg {
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 8192);
-	__type(key, struct dentry *);
+	__type(key, u32);
 	__type(value, struct create_arg);
 } start SEC(".maps");
 
