@@ -20,14 +20,14 @@ const volatile __u16 target_family = 0;
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, MAX_ENTRIES);
-	__type(key, struct sock *);
+	__type(key, u32);
 	__type(value, __u64);
 } birth SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, MAX_ENTRIES);
-	__type(key, struct sock *);
+	__type(key, u32);
 	__type(value, struct ident);
 } idents SEC(".maps");
 

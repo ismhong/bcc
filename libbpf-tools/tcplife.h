@@ -12,8 +12,8 @@ struct ident {
 };
 
 struct event {
-	unsigned __int128 saddr;
-	unsigned __int128 daddr;
+	struct in6_addr saddr;
+	struct in6_addr daddr;
 	__u64 ts_us;
 	__u64 span_us;
 	__u64 rx_b;
