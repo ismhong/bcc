@@ -5,7 +5,7 @@
 #define PATH_MAX	4096
 #define TASK_COMM_LEN	16
 
-enum op {
+enum file_op {
 	READ,
 	WRITE,
 };

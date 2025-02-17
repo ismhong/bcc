@@ -28,7 +28,7 @@ static void get_file_path(struct file *file, char *buf, size_t size)
 	bpf_probe_read_kernel(buf, size, dname.name);
 }
 
-static int probe_entry(struct pt_regs *ctx, struct file *file, size_t count, enum op op)
+static int probe_entry(struct pt_regs *ctx, struct file *file, size_t count, enum file_op op)
 {
 	__u64 pid_tgid = bpf_get_current_pid_tgid();
 	__u32 pid = pid_tgid >> 32;
