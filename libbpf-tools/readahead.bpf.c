@@ -18,14 +18,15 @@ struct {
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, MAX_ENTRIES);
-	__type(key, struct page *);
-	__type(value, u64);
+	__type(key, u32);   // page address
+	__type(value, u64); // page create time
 } birth SEC(".maps");
 
 struct hist hist = {};
 
-SEC("fentry/do_page_cache_ra")
-int BPF_PROG(do_page_cache_ra)
+SEC("kprobe/do_page_cache_ra")
+int BPF_PROG(do_page_cache_ra, struct readahead_control *ractl,
+		unsigned long nr_to_read, unsigned long lookahead_size)
 {
 	u32 pid = bpf_get_current_pid_tgid();
 	u64 one = 1;
@@ -51,28 +52,32 @@ int alloc_done(struct page *page)
 	return 0;
 }
 
-SEC("fexit/__page_cache_alloc")
-int BPF_PROG(page_cache_alloc_ret, gfp_t gfp, struct page *ret)
+SEC("kretprobe/__page_cache_alloc")
+int BPF_PROG(page_cache_alloc_ret, struct page *ret)
 {
 	return alloc_done(ret);
 }
 
-SEC("fexit/filemap_alloc_folio")
-int BPF_PROG(filemap_alloc_folio_ret, gfp_t gfp, unsigned int order,
-	struct folio *ret)
+SEC("kretprobe/filemap_alloc_folio")
+int BPF_PROG(filemap_alloc_folio_ret, struct folio *ret)
 {
 	return alloc_done(&ret->page);
 }
 
-SEC("fexit/filemap_alloc_folio_noprof")
-int BPF_PROG(filemap_alloc_folio_noprof_ret, gfp_t gfp, unsigned int order,
-	struct folio *ret)
+SEC("kretprobe/filemap_alloc_folio_noprof")
+int BPF_PROG(filemap_alloc_folio_noprof_ret, struct folio *ret)
 {
 	return alloc_done(&ret->page);
 }
 
-SEC("fexit/do_page_cache_ra")
-int BPF_PROG(do_page_cache_ra_ret)
+SEC("kretprobe/__folio_alloc")
+int BPF_KRETPROBE(folio_alloc_ret, struct folio *ret)
+{
+	return alloc_done(&ret->page);
+}
+
+SEC("kretprobe/do_page_cache_ra")
+int BPF_KRETPROBE(do_page_cache_ra_ret)
 {
 	u32 pid = bpf_get_current_pid_tgid();
 

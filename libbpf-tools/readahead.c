@@ -130,6 +130,9 @@ static int attach_alloc_ret(struct readahead_bpf *obj)
 	bpf_program__set_autoload(obj->progs.page_cache_alloc_ret, false);
 	bpf_program__set_autoload(obj->progs.filemap_alloc_folio_ret, false);
 	bpf_program__set_autoload(obj->progs.filemap_alloc_folio_noprof_ret, false);
+	// In arm32, these functions are either inline function or old deprecated function.
+	// We directly disable autoload and return from this function.
+	return 0;
 
 	/*
 	 * b951aaff5035 ("mm: enable page allocation tagging") in v6.10
@@ -181,10 +184,12 @@ int main(int argc, char **argv)
 	err = attach_alloc_ret(obj);
 	if (err)
 		goto cleanup;
-	err = readahead__set_attach_target(obj->progs.do_page_cache_ra);
+	// Don't change the attach target, just follow the definition of eBPF program
+	// err = readahead__set_attach_target(obj->progs.do_page_cache_ra);
 	if (err)
 		goto cleanup;
-	err = readahead__set_attach_target(obj->progs.do_page_cache_ra_ret);
+	// Don't change the attach target, just follow the definition of eBPF program
+	// err = readahead__set_attach_target(obj->progs.do_page_cache_ra_ret);
 	if (err)
 		goto cleanup;
 
