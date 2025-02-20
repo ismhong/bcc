@@ -2,9 +2,9 @@
 #ifndef __KLOCKSTAT_H
 #define __KLOCKSTAT_H
 
-#define MAX_ENTRIES 102400
+#define MAX_ENTRIES 51200
 #define TASK_COMM_LEN 16
-#define PERF_MAX_STACK_DEPTH 127
+#define PERF_MAX_STACK_DEPTH 128
 
 struct lock_stat {
 	__u64 acq_count;

@@ -13,14 +13,14 @@
 
 const volatile pid_t targ_tgid = 0;
 const volatile pid_t targ_pid = 0;
-void *const volatile targ_lock = NULL;
+const volatile __u32 targ_lock = 0;
 const volatile int per_thread = 0;
 
 struct {
 	__uint(type, BPF_MAP_TYPE_STACK_TRACE);
 	__uint(max_entries, MAX_ENTRIES);
 	__uint(key_size, sizeof(u32));
-	__uint(value_size, PERF_MAX_STACK_DEPTH * sizeof(u64));
+	__uint(value_size, PERF_MAX_STACK_DEPTH * sizeof(u32));
 } stack_map SEC(".maps");
 
 /*
@@ -101,7 +101,7 @@ static void lock_contended(void *ctx, void *lock)
 	struct lockholder_info li[1] = {0};
 	struct task_lock tl = {};
 
-	if (targ_lock && targ_lock != lock)
+	if (targ_lock && (void *) targ_lock != lock)
 		return;
 	task_id = bpf_get_current_pid_tgid();
 	if (!tracing_task(task_id))
@@ -126,7 +126,7 @@ static void lock_aborted(void *lock)
 	u64 task_id;
 	struct task_lock tl = {};
 
-	if (targ_lock && targ_lock != lock)
+	if (targ_lock && (void *) targ_lock != lock)
 		return;
 	task_id = bpf_get_current_pid_tgid();
 	if (!tracing_task(task_id))
@@ -144,7 +144,7 @@ static void lock_acquired(void *lock)
 	struct lockholder_info *li;
 	struct task_lock tl = {};
 
-	if (targ_lock && targ_lock != lock)
+	if (targ_lock && (void *) targ_lock != lock)
 		return;
 	task_id = bpf_get_current_pid_tgid();
 	if (!tracing_task(task_id))
@@ -234,7 +234,7 @@ static void lock_released(void *lock)
 	struct lockholder_info *li;
 	struct task_lock tl = {};
 
-	if (targ_lock && targ_lock != lock)
+	if (targ_lock && (void *) targ_lock != lock)
 		return;
 	task_id = bpf_get_current_pid_tgid();
 	if (!tracing_task(task_id))

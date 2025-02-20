@@ -258,11 +258,12 @@ static void *parse_lock_addr(const char *lock_name)
 	return sscanf(lock_name, "0x%lx", &lock_addr) ? (void*)lock_addr : NULL;
 }
 
-static void *get_lock_addr(struct ksyms *ksyms, const char *lock_name)
+static unsigned long get_lock_addr(struct ksyms *ksyms, const char *lock_name)
 {
 	const struct ksym *ksym = ksyms__get_symbol(ksyms, lock_name);
 
-	return ksym ? (void*)ksym->addr : parse_lock_addr(lock_name);
+	void *res =  ksym ? (void*)ksym->addr : parse_lock_addr(lock_name);
+	return (unsigned long) res;
 }
 
 static const char *get_lock_name(struct ksyms *ksyms, unsigned long addr)
