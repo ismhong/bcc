@@ -130,7 +130,7 @@ int BPF_PROG(sched_wakeup, struct task_struct *p)
 	if (filter_cg && !bpf_current_task_under_cgroup(&cgroup_map, 0))
 		return 0;
 
-	return trace_enqueue(p->tgid, p->pid);
+	return trace_enqueue(BPF_CORE_READ(p, tgid), BPF_CORE_READ(p, pid));
 }
 
 SEC("tp_btf/sched_wakeup_new")
@@ -139,7 +139,7 @@ int BPF_PROG(sched_wakeup_new, struct task_struct *p)
 	if (filter_cg && !bpf_current_task_under_cgroup(&cgroup_map, 0))
 		return 0;
 
-	return trace_enqueue(p->tgid, p->pid);
+	return trace_enqueue(BPF_CORE_READ(p, tgid), BPF_CORE_READ(p, pid));
 }
 
 SEC("tp_btf/sched_switch")
