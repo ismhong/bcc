@@ -100,13 +100,13 @@ static int handle_switch(void *ctx, struct task_struct *prev, struct task_struct
 SEC("tp_btf/sched_wakeup")
 int BPF_PROG(sched_wakeup, struct task_struct *p)
 {
-	return trace_enqueue(p->tgid, p->pid, p->comm);
+	return trace_enqueue(BPF_CORE_READ(p, tgid), BPF_CORE_READ(p, pid), p->comm);
 }
 
 SEC("tp_btf/sched_wakeup_new")
 int BPF_PROG(sched_wakeup_new, struct task_struct *p)
 {
-	return trace_enqueue(p->tgid, p->pid, p->comm);
+	return trace_enqueue(BPF_CORE_READ(p, tgid), BPF_CORE_READ(p, pid), p->comm);
 }
 
 SEC("tp_btf/sched_switch")
