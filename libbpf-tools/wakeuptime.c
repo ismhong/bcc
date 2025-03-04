@@ -28,7 +28,7 @@ struct env {
 } env = {
 	.verbose = false,
 	.stack_storage_size = 1024,
-	.perf_max_stack_depth = 127,
+	.perf_max_stack_depth = 128,
 	.min_block_time = 1,
 	.max_block_time = -1,
 	.duration = 99999999,
@@ -97,6 +97,11 @@ static error_t parse_arg(int key, char *arg, struct argp_state *state)
 		if (errno) {
 			fprintf(stderr, "invalid perf max stack depth: %s\n", arg);
 			argp_usage(state);
+		} else if (env.perf_max_stack_depth % 2 == 1) {
+ 			printf("stack depth must be a multiple of two.\n");
+ 			printf("convert depth from %d to %d.\n", env.perf_max_stack_depth,
+ 				env.perf_max_stack_depth + 1);
+ 			env.perf_max_stack_depth++;
 		}
 		break;
 	case OPT_STACK_STORAGE_SIZE:

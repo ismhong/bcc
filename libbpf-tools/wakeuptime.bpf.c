@@ -39,11 +39,12 @@ static int offcpu_sched_switch(struct task_struct *prev)
 	u32 pid = pid_tgid >> 32;
 	u32 tid = (u32)pid_tgid;
 	u64 ts;
+	unsigned int flags = BPF_CORE_READ(prev, flags);
 
 	if (targ_pid && targ_pid != pid)
 		return 0;
 
-	if (user_threads_only && prev->flags & PF_KTHREAD)
+	if (user_threads_only && flags & PF_KTHREAD)
 		return 0;
 
 	ts = bpf_ktime_get_ns();
@@ -53,8 +54,8 @@ static int offcpu_sched_switch(struct task_struct *prev)
 
 static int wakeup(void *ctx, struct task_struct *p)
 {
-	u32 pid = p->tgid;
-	u32 tid = p->pid;
+	u32 pid = BPF_CORE_READ(p,tgid);
+	u32 tid = BPF_CORE_READ(p,pid);
 	u64 delta, *count_key, *tsp;
 	static const u64 zero;
 	struct key_t key = {};
