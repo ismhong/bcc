@@ -98,7 +98,8 @@ static int gen_alloc_enter(size_t size)
 	}
 
 	const u32 tid = bpf_get_current_pid_tgid();
-	bpf_map_update_elem(&sizes, &tid, &size, BPF_ANY);
+	u64 size_u64 = (u64) size;
+	bpf_map_update_elem(&sizes, &tid, &size_u64, BPF_ANY);
 
 	if (trace_all)
 		bpf_printk("alloc entered, size = %lu\n", size);

@@ -66,7 +66,7 @@ static struct env {
 	.max_size = -1, // -Z --max-size
 	.object = {0}, // -O --obj
 	.percpu = false, // --percpu
-	.perf_max_stack_depth = 127,
+	.perf_max_stack_depth = 128,
 	.stack_map_max_entries = 10240,
 	.page_size = 1,
 	.kernel_trace = true,
