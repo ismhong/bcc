@@ -70,7 +70,7 @@ static int handle_event(void *ctx, void *data, size_t len)
 		printf("%s Triggered by PID %d (\"%s\"), OOM kill of PID %d (\"%s\"), %lld pages, loadavg: %s",
 			ts, e->fpid, e->fcomm, e->tpid, e->tcomm, e->pages, loadavg);
 	else
-		printf("%s Triggered by PID %d (\"%s\"), OOM kill of PID %d (\"%s\"), %lld pages\n",
+		printf("%s Triggered by PID %d (\"%s\"), OOM kill of PID %d (\"%s\"), %lu pages\n",
 			ts, e->fpid, e->fcomm, e->tpid, e->tcomm, e->pages);
 
 	return 0;
