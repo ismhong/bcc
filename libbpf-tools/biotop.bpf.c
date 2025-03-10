@@ -14,14 +14,14 @@ const volatile pid_t target_pid = 0;
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 10240);
-	__type(key, struct request *);
+	__type(key, u32);
 	__type(value, struct start_req_t);
 } start SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 10240);
-	__type(key, struct request *);
+	__type(key, u32);
 	__type(value, struct who_t);
 } whobyreq SEC(".maps");
 
