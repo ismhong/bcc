@@ -32,7 +32,7 @@ struct piddata {
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, MAX_ENTRIES);
-	__type(key, struct request *);
+	__type(key, u32);
 	__type(value, struct piddata);
 } infobyreq SEC(".maps");
 
@@ -45,7 +45,7 @@ struct stage {
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, MAX_ENTRIES);
-	__type(key, struct request *);
+	__type(key, u32);
 	__type(value, struct stage);
 } start SEC(".maps");
 
