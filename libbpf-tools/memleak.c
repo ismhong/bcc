@@ -23,6 +23,7 @@
 #include "memleak.h"
 #include "memleak.skel.h"
 #include "trace_helpers.h"
+#include <limits.h>
 
 #ifdef USE_BLAZESYM
 #include "blazesym.h"
