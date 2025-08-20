@@ -21,6 +21,7 @@
 #include "profile.h"
 #include "profile.skel.h"
 #include "trace_helpers.h"
+#include <limits.h>
 
 #define OPT_PERF_MAX_STACK_DEPTH	1 /* --perf-max-stack-depth */
 #define OPT_STACK_STORAGE_SIZE		2 /* --stack-storage-size */

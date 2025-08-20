@@ -10,6 +10,7 @@
 #include "vfsstat.skel.h"
 #include "btf_helpers.h"
 #include "trace_helpers.h"
+#include <limits.h>
 
 const char *argp_program_version = "vfsstat 0.1";
 const char *argp_program_bug_address =

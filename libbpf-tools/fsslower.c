@@ -27,6 +27,7 @@
 #include "fsslower.skel.h"
 #include "btf_helpers.h"
 #include "trace_helpers.h"
+#include <limits.h>
 
 #define PERF_BUFFER_PAGES	64
 #define PERF_POLL_TIMEOUT_MS	100
