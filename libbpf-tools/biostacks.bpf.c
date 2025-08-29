@@ -104,14 +104,14 @@ int BPF_KPROBE(blk_account_io_merge_bio, struct request *rq)
 	return trace_start(ctx, rq, true);
 }
 
-SEC("fentry/blk_account_io_start")
-int BPF_PROG(blk_account_io_start, struct request *rq)
+SEC("kprobe/blk_account_io_start")
+int BPF_KPROBE(blk_account_io_start, struct request *rq)
 {
 	return trace_start(ctx, rq, false);
 }
 
-SEC("fentry/blk_account_io_done")
-int BPF_PROG(blk_account_io_done, struct request *rq)
+SEC("kprobe/blk_account_io_done")
+int BPF_KPROBE(blk_account_io_done, struct request *rq)
 {
 	return trace_done(ctx, rq);
 }
