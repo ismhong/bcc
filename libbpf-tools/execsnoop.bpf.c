@@ -2,6 +2,7 @@
 #include <vmlinux.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
+#include <bpf/bpf_tracing.h>
 #include "execsnoop.h"
 
 const volatile bool filter_cg = false;
@@ -35,15 +36,14 @@ static __always_inline bool valid_uid(uid_t uid) {
 	return uid != INVALID_UID;
 }
 
-SEC("tracepoint/syscalls/sys_enter_execve")
-int tracepoint__syscalls__sys_enter_execve(struct syscall_trace_enter* ctx)
+SEC("ksyscall/execve")
+int BPF_KSYSCALL(execve_entry, const char *filename, const char *const *argv, const char *const *envp)
 {
 	u64 id;
 	pid_t pid, tgid;
 	int ret;
 	struct event *event;
 	struct task_struct *task;
-	const char **args = (const char **)(ctx->args[1]);
 	const char *argp;
 
 	if (filter_cg && !bpf_current_task_under_cgroup(&cgroup_map, 0))
@@ -72,7 +72,7 @@ int tracepoint__syscalls__sys_enter_execve(struct syscall_trace_enter* ctx)
 	event->args_count = 0;
 	event->args_size = 0;
 
-	ret = bpf_probe_read_user_str(event->args, ARGSIZE, (const char*)ctx->args[0]);
+	ret = bpf_probe_read_user_str(event->args, ARGSIZE, filename);
 	if (ret < 0) {
 		return 0;
 	}
@@ -87,7 +87,7 @@ int tracepoint__syscalls__sys_enter_execve(struct syscall_trace_enter* ctx)
 	event->args_count++;
 	#pragma unroll
 	for (i = 1; i < TOTAL_MAX_ARGS && i < max_args; i++) {
-		ret = bpf_probe_read_user(&argp, sizeof(argp), &args[i]);
+		ret = bpf_probe_read_user(&argp, sizeof(argp), &argv[i]);
 		if (ret < 0)
 			return 0;
 
@@ -102,7 +102,7 @@ int tracepoint__syscalls__sys_enter_execve(struct syscall_trace_enter* ctx)
 		event->args_size += ret;
 	}
 	/* try to read one more argument to check if there is one */
-	ret = bpf_probe_read_user(&argp, sizeof(argp), &args[max_args]);
+	ret = bpf_probe_read_user(&argp, sizeof(argp), &argv[max_args]);
 	if (ret < 0)
 		return 0;
 
@@ -111,8 +111,8 @@ int tracepoint__syscalls__sys_enter_execve(struct syscall_trace_enter* ctx)
 	return 0;
 }
 
-SEC("tracepoint/syscalls/sys_exit_execve")
-int tracepoint__syscalls__sys_exit_execve(struct syscall_trace_exit* ctx)
+SEC("kretsyscall/execve")
+int BPF_KSYSCALL(execve_exit, int rc)
 {
 	u64 id;
 	pid_t pid;
@@ -131,7 +131,7 @@ int tracepoint__syscalls__sys_exit_execve(struct syscall_trace_exit* ctx)
 	event = bpf_map_lookup_elem(&execs, &pid);
 	if (!event)
 		return 0;
-	ret = ctx->ret;
+	ret = rc;
 	if (ignore_failed && ret < 0)
 		goto cleanup;
 
