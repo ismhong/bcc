@@ -299,6 +299,13 @@ int main(int argc, char **argv)
 	obj->rodata->max_args = env.max_args;
 	obj->rodata->filter_cg = env.cg;
 
+	if (!kprobe_exists("__arm64_compat_sys_execve")) {
+		bpf_program__set_autoload(obj->progs.compat_execve_entry, false);
+		bpf_program__set_autoload(obj->progs.compat_execve_exit, false);
+	} else {
+		printf("Monitor both native and compat execve syscall ...\n");
+	}
+
 	err = execsnoop_bpf__load(obj);
 	if (err) {
 		fprintf(stderr, "failed to load BPF object: %d\n", err);

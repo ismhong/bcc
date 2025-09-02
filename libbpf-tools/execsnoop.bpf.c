@@ -36,15 +36,15 @@ static __always_inline bool valid_uid(uid_t uid) {
 	return uid != INVALID_UID;
 }
 
-SEC("ksyscall/execve")
-int BPF_KSYSCALL(execve_entry, const char *filename, const char *const *argv, const char *const *envp)
+static __always_inline
+int __execve_entry(const char *filename, const char *const *argv, const char *const *envp, bool is_compat)
 {
 	u64 id;
 	pid_t pid, tgid;
 	int ret;
 	struct event *event;
 	struct task_struct *task;
-	const char *argp;
+	u64 argp;
 
 	if (filter_cg && !bpf_current_task_under_cgroup(&cgroup_map, 0))
 		return 0;
@@ -87,14 +87,17 @@ int BPF_KSYSCALL(execve_entry, const char *filename, const char *const *argv, co
 	event->args_count++;
 	#pragma unroll
 	for (i = 1; i < TOTAL_MAX_ARGS && i < max_args; i++) {
-		ret = bpf_probe_read_user(&argp, sizeof(argp), &argv[i]);
+        u64 argument_size = (is_compat)? 4 : 8;
+        u64 argv_addr = (u64)argv + i * argument_size;
+		ret = bpf_probe_read_user(&argp, sizeof(argp), (void *)argv_addr);
 		if (ret < 0)
 			return 0;
 
 		if (event->args_size > LAST_ARG)
 			return 0;
 
-		ret = bpf_probe_read_user_str(&event->args[event->args_size], ARGSIZE, argp);
+        argp = (is_compat)? argp & 0xFFFFFFFF : argp;
+		ret = bpf_probe_read_user_str(&event->args[event->args_size], ARGSIZE, (void *)argp);
 		if (ret < 0)
 			return 0;
 
@@ -111,8 +114,20 @@ int BPF_KSYSCALL(execve_entry, const char *filename, const char *const *argv, co
 	return 0;
 }
 
-SEC("kretsyscall/execve")
-int BPF_KSYSCALL(execve_exit, int rc)
+SEC("kprobe/__arm64_compat_sys_execve")
+int BPF_KSYSCALL(compat_execve_entry, const char *filename, const char *const *argv, const char *const *envp)
+{
+    return __execve_entry(filename, argv, envp, true);
+}
+
+SEC("ksyscall/execve")
+int BPF_KSYSCALL(execve_entry, const char *filename, const char *const *argv, const char *const *envp)
+{
+    return __execve_entry(filename, argv, envp, false);
+}
+
+static __always_inline
+int __execve_exit(void *ctx, int rc)
 {
 	u64 id;
 	pid_t pid;
@@ -143,6 +158,18 @@ int BPF_KSYSCALL(execve_exit, int rc)
 cleanup:
 	bpf_map_delete_elem(&execs, &pid);
 	return 0;
+}
+
+SEC("kretprobe/__arm64_compat_sys_execve")
+int BPF_KRETPROBE(compat_execve_exit, int rc)
+{
+    return __execve_exit(ctx, rc);
+}
+
+SEC("kretsyscall/execve")
+int BPF_KRETPROBE(execve_exit, int rc)
+{
+    return __execve_exit(ctx, rc);
 }
 
 char LICENSE[] SEC("license") = "GPL";
