@@ -259,7 +259,7 @@ int handle_event(void *ctx, void *data, size_t data_sz)
 	sps_cnt += 7 + 17 + 4 + 4;
 	if (env.extended) {
 		if (e.mode == 0 && (e.flags & O_CREAT) == 0 &&
-		    (e.flags & O_TMPFILE) != O_TMPFILE)
+			(e.flags & O_TMPFILE) != O_TMPFILE)
 			printf("%08o n/a  ", e.flags);
 		else
 			printf("%08o %04o ", e.flags, e.mode);
@@ -341,18 +341,20 @@ int main(int argc, char **argv)
 	obj->rodata->full_path = env.full_path;
 
 	/* aarch64 and riscv64 don't have open syscall */
-	if (!tracepoint_exists("syscalls", "sys_enter_open")) {
-		bpf_program__set_autoload(obj->progs.tracepoint__syscalls__sys_enter_open, false);
-		bpf_program__set_autoload(obj->progs.tracepoint__syscalls__sys_exit_open, false);
+	// FIXME: find better way to deal with it
+	if (!kprobe_exists("__arm64_sys_open")) {
+		bpf_program__set_autoload(obj->progs.open_entry, false);
+		bpf_program__set_autoload(obj->progs.open_exit, false);
 	}
 
 	/**
 	 * linux since v5.5 support openat2(2), commit fddb5d430ad9 ("open:
 	 * introduce openat2(2) syscall").
 	 */
-	if (!tracepoint_exists("syscalls", "sys_enter_openat2")) {
-		bpf_program__set_autoload(obj->progs.tracepoint__syscalls__sys_enter_openat2, false);
-		bpf_program__set_autoload(obj->progs.tracepoint__syscalls__sys_exit_openat2, false);
+	// FIXME: find better way to deal with it
+	if (!kprobe_exists("__arm64_sys_openat2")) {
+		bpf_program__set_autoload(obj->progs.openat2_entry, false);
+		bpf_program__set_autoload(obj->progs.openat2_exit, false);
 	}
 
 	err = opensnoop_bpf__load(obj);

@@ -4,6 +4,7 @@
 #include <vmlinux.h>
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
 #include "compat.bpf.h"
 #include "opensnoop.h"
 #include "path_helpers.bpf.h"
@@ -51,8 +52,8 @@ bool trace_allowed(u32 tgid, u32 pid)
 	return true;
 }
 
-SEC("tracepoint/syscalls/sys_enter_open")
-int tracepoint__syscalls__sys_enter_open(struct syscall_trace_enter* ctx)
+static __always_inline
+int trace_entry(const char *filename, int flags, mode_t mode)
 {
 	u64 id = bpf_get_current_pid_tgid();
 	/* use kernel terminology here for tgid/pid: */
@@ -62,57 +63,37 @@ int tracepoint__syscalls__sys_enter_open(struct syscall_trace_enter* ctx)
 	/* store arg info for later lookup */
 	if (trace_allowed(tgid, pid)) {
 		struct args_t args = {};
-		args.fname = (const char *)ctx->args[0];
-		args.flags = (int)ctx->args[1];
-		args.mode = (__u32)ctx->args[2];
+		args.fname = filename;
+		args.flags = flags;
+		args.mode = mode;
 		bpf_map_update_elem(&start, &pid, &args, 0);
 	}
 	return 0;
 }
 
-SEC("tracepoint/syscalls/sys_enter_openat")
-int tracepoint__syscalls__sys_enter_openat(struct syscall_trace_enter* ctx)
+SEC("ksyscall/open")
+int BPF_KSYSCALL(open_entry, char *filename, int flags, mode_t mode)
 {
-	u64 id = bpf_get_current_pid_tgid();
-	/* use kernel terminology here for tgid/pid: */
-	u32 tgid = id >> 32;
-	u32 pid = id;
-
-	/* store arg info for later lookup */
-	if (trace_allowed(tgid, pid)) {
-		struct args_t args = {};
-		args.fname = (const char *)ctx->args[1];
-		args.flags = (int)ctx->args[2];
-		args.mode = (__u32)ctx->args[3];
-		bpf_map_update_elem(&start, &pid, &args, 0);
-	}
-	return 0;
+	return trace_entry(filename, flags, mode);
 }
 
-SEC("tracepoint/syscalls/sys_enter_openat2")
-int tracepoint__syscalls__sys_enter_openat2(struct syscall_trace_enter* ctx)
+SEC("ksyscall/openat")
+int BPF_KSYSCALL(openat_entry, int dfd, char *filename, int flags, mode_t mode)
 {
-	u64 id = bpf_get_current_pid_tgid();
-	/* use kernel terminology here for tgid/pid: */
-	u32 tgid = id >> 32;
-	u32 pid = id;
-
-	/* store arg info for later lookup */
-	if (trace_allowed(tgid, pid)) {
-		struct args_t args = {};
-		struct open_how how = {};
-		args.fname = (const char *)ctx->args[1];
-		bpf_probe_read_user(&how, sizeof(how), (void *)ctx->args[2]);
-		args.flags = (int)how.flags;
-		args.mode = (__u32)how.mode;
-		bpf_map_update_elem(&start, &pid, &args, 0);
-	}
-	return 0;
+	return trace_entry(filename, flags, mode);
 }
 
+SEC("ksyscall/openat2")
+int BPF_KSYSCALL(openat2_entry, int dfd, char *filename, struct open_how *how)
+{
+	int flags = BPF_CORE_READ(how, flags);
+	mode_t mode = BPF_CORE_READ(how, mode);
+
+	return trace_entry(filename, flags, mode);
+}
 
 static __always_inline
-int trace_exit(struct syscall_trace_exit* ctx)
+int trace_exit(struct pt_regs *ctx, int rc)
 {
 	struct event *eventp;
 	struct args_t *ap;
@@ -123,7 +104,7 @@ int trace_exit(struct syscall_trace_exit* ctx)
 	ap = bpf_map_lookup_elem(&start, &pid);
 	if (!ap)
 		return 0;	/* missed entry */
-	ret = ctx->ret;
+	ret = PT_REGS_RC_CORE(ctx);
 	if (targ_failed && ret >= 0)
 		goto cleanup;	/* want failed only */
 
@@ -148,7 +129,7 @@ int trace_exit(struct syscall_trace_exit* ctx)
 	eventp->ret = ret;
 
 	bpf_get_stack(ctx, &stack, sizeof(stack),
-		      BPF_F_USER_STACK);
+			  BPF_F_USER_STACK);
 	/* Skip the first address that is usually the syscall it-self */
 	eventp->callers[0] = stack[1];
 	eventp->callers[1] = stack[2];
@@ -166,22 +147,22 @@ cleanup:
 	return 0;
 }
 
-SEC("tracepoint/syscalls/sys_exit_open")
-int tracepoint__syscalls__sys_exit_open(struct syscall_trace_exit* ctx)
+SEC("kretsyscall/open")
+int BPF_KRETPROBE(open_exit, int rc)
 {
-	return trace_exit(ctx);
+	return trace_exit(ctx, rc);
 }
 
-SEC("tracepoint/syscalls/sys_exit_openat")
-int tracepoint__syscalls__sys_exit_openat(struct syscall_trace_exit* ctx)
+SEC("kretsyscall/openat")
+int BPF_KRETPROBE(openat_exit, int rc)
 {
-	return trace_exit(ctx);
+	return trace_exit(ctx, rc);
 }
 
-SEC("tracepoint/syscalls/sys_exit_openat2")
-int tracepoint__syscalls__sys_exit_openat2(struct syscall_trace_exit* ctx)
+SEC("kretsyscall/openat2")
+int BPF_KRETPROBE(openat2_exit, int rc)
 {
-	return trace_exit(ctx);
+	return trace_exit(ctx, rc);
 }
 
 char LICENSE[] SEC("license") = "GPL";
