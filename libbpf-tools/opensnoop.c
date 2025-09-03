@@ -357,6 +357,22 @@ int main(int argc, char **argv)
 		bpf_program__set_autoload(obj->progs.openat2_exit, false);
 	}
 
+	/* arm64 compat open syscall check */
+	if (!kprobe_exists("__arm64_compat_sys_open")) {
+		bpf_program__set_autoload(obj->progs.compat_open_entry, false);
+		bpf_program__set_autoload(obj->progs.compat_open_exit, false);
+	} else {
+		printf("Monitor both native and compat open syscall ...\n");
+	}
+
+	/* arm64 compat openat syscall check */
+	if (!kprobe_exists("__arm64_compat_sys_openat")) {
+		bpf_program__set_autoload(obj->progs.compat_openat_entry, false);
+		bpf_program__set_autoload(obj->progs.compat_openat_exit, false);
+	} else {
+		printf("Monitor both native and compat openat syscall ...\n");
+	}
+
 	err = opensnoop_bpf__load(obj);
 	if (err) {
 		fprintf(stderr, "failed to load BPF object: %d\n", err);

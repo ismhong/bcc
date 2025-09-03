@@ -92,6 +92,18 @@ int BPF_KSYSCALL(openat2_entry, int dfd, char *filename, struct open_how *how)
 	return trace_entry(filename, flags, mode);
 }
 
+SEC("kprobe/__arm64_compat_sys_open")
+int BPF_KSYSCALL(compat_open_entry, char *filename, int flags, mode_t mode)
+{
+	return trace_entry(filename, flags, mode);
+}
+
+SEC("kprobe/__arm64_compat_sys_openat")
+int BPF_KSYSCALL(compat_openat_entry, int dfd, char *filename, int flags, mode_t mode)
+{
+	return trace_entry(filename, flags, mode);
+}
+
 static __always_inline
 int trace_exit(struct pt_regs *ctx, int rc)
 {
@@ -161,6 +173,18 @@ int BPF_KRETPROBE(openat_exit, int rc)
 
 SEC("kretsyscall/openat2")
 int BPF_KRETPROBE(openat2_exit, int rc)
+{
+	return trace_exit(ctx, rc);
+}
+
+SEC("kretprobe/__arm64_compat_sys_open")
+int BPF_KRETPROBE(compat_open_exit, int rc)
+{
+	return trace_exit(ctx, rc);
+}
+
+SEC("kretprobe/__arm64_compat_sys_openat")
+int BPF_KRETPROBE(compat_openat_exit, int rc)
 {
 	return trace_exit(ctx, rc);
 }
