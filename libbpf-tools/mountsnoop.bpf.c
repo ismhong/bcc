@@ -139,115 +139,121 @@ cleanup:
 	return 0;
 }
 
-SEC("tracepoint/syscalls/sys_enter_mount")
-int mount_entry(struct syscall_trace_enter *ctx)
+SEC("ksyscall/mount")
+int BPF_KSYSCALL(mount_entry, const char *source,
+                      const char *target, const char *type,
+                      const unsigned long flags, const char *data)
 {
 	union sys_arg arg = {};
 
-	arg.mount.src = (const char *)ctx->args[0];
-	arg.mount.dest = (const char *)ctx->args[1];
-	arg.mount.fs = (const char *)ctx->args[2];
-	arg.mount.flags = (__u64)ctx->args[3];
-	arg.mount.data = (const char *)ctx->args[4];
+	arg.mount.src = source;
+	arg.mount.dest = target;
+	arg.mount.fs = type;
+	arg.mount.flags = flags;
+	arg.mount.data = data;
 
 	return probe_entry(&arg, MOUNT);
 }
 
-SEC("tracepoint/syscalls/sys_exit_mount")
-int mount_exit(struct syscall_trace_exit *ctx)
+SEC("kretsyscall/mount")
+int BPF_KRETPROBE(mount_exit, int rc)
 {
-	return probe_exit(ctx, (int)ctx->ret);
+	return probe_exit(ctx, rc);
 }
 
-SEC("tracepoint/syscalls/sys_enter_umount")
-int umount_entry(struct syscall_trace_enter *ctx)
+SEC("ksyscall/umount")
+int BPF_KSYSCALL(umount_entry, const char *target, const int flags)
 {
 	union sys_arg arg = {};
 
-	arg.umount.dest = (const char *)ctx->args[0];
-	arg.umount.flags = (__u64)ctx->args[1];
+	arg.umount.dest = target;
+	arg.umount.flags = flags;
 
 	return probe_entry(&arg, UMOUNT);
 }
 
-SEC("tracepoint/syscalls/sys_exit_umount")
-int umount_exit(struct syscall_trace_exit *ctx)
+SEC("kretsyscall/umount")
+int BPF_KRETPROBE(umount_exit, int rc)
 {
-	return probe_exit(ctx, (int)ctx->ret);
+	return probe_exit(ctx, rc);
 }
 
-SEC("tracepoint/syscalls/sys_enter_fsopen")
-int fsopen_entry(struct syscall_trace_enter *ctx)
+SEC("ksyscall/fsopen")
+int BPF_KSYSCALL(fsopen_entry, char *fs_name, unsigned long flags)
 {
 	union sys_arg arg = {};
 
-	arg.fsopen.fs = (const char *)ctx->args[0];
-	arg.fsopen.flags = (__u32)ctx->args[1];
+	arg.fsopen.fs = fs_name;
+	arg.fsopen.flags = flags;
 
 	return probe_entry(&arg, FSOPEN);
 }
 
-SEC("tracepoint/syscalls/sys_exit_fsopen")
-int fsopen_exit(struct syscall_trace_exit *ctx)
+SEC("kretsyscall/fsopen")
+int BPF_KRETPROBE(fsopen_exit, int rc)
 {
-	return probe_exit(ctx, (int)ctx->ret);
+	return probe_exit(ctx, rc);
 }
 
-SEC("tracepoint/syscalls/sys_enter_fsconfig")
-int fsconfig_entry(struct syscall_trace_enter *ctx)
+SEC("ksyscall/fsconfig")
+int BPF_KSYSCALL(fsconfig_entry, int fd, unsigned int cmd,
+                      char *key, char *value, int aux)
 {
 	union sys_arg arg = {};
 
-	arg.fsconfig.fd = (int)ctx->args[0];
-	arg.fsconfig.cmd = (int)ctx->args[1];
-	arg.fsconfig.key = (const char *)ctx->args[2];
-	arg.fsconfig.value = (const char *)ctx->args[3];
-	arg.fsconfig.aux = (int)ctx->args[4];
+	arg.fsconfig.fd = fd;
+	arg.fsconfig.cmd = cmd;
+	arg.fsconfig.key = key;
+	arg.fsconfig.value = value;
+	arg.fsconfig.aux = aux;
 
 	return probe_entry(&arg, FSCONFIG);
 }
 
-SEC("tracepoint/syscalls/sys_exit_fsconfig")
-int fsconfig_exit(struct syscall_trace_exit *ctx)
+SEC("kretsyscall/fsconfig")
+int BPF_KRETPROBE(fsconfig_exit, int rc)
 {
-	return probe_exit(ctx, (int)ctx->ret);
+	return probe_exit(ctx, rc);
 }
 
-SEC("tracepoint/syscalls/sys_enter_fsmount")
-int fsmount_entry(struct syscall_trace_enter *ctx)
+SEC("ksyscall/fsmount")
+int BPF_KSYSCALL(fsmount_entry, unsigned int fs_fd,
+                     unsigned int flags, unsigned int attr_flags)
 {
 	union sys_arg arg = {};
 
-	arg.fsmount.fs_fd = (__u32)ctx->args[0];
-	arg.fsmount.flags = (__u32)ctx->args[1];
-	arg.fsmount.attr_flags = (__u32)ctx->args[2];
+	arg.fsmount.fs_fd = fs_fd;
+	arg.fsmount.flags = flags;
+	arg.fsmount.attr_flags = attr_flags;
 
 	return probe_entry(&arg, FSMOUNT);
 }
 
-SEC("tracepoint/syscalls/sys_exit_fsmount")
-int fsmount_exit(struct syscall_trace_exit *ctx)
+SEC("kretsyscall/fsmount")
+int BPF_KRETPROBE(fsmount_exit, int rc)
 {
-	return probe_exit(ctx, (int)ctx->ret);
+	return probe_exit(ctx, rc);
 }
 
-SEC("tracepoint/syscalls/sys_enter_move_mount")
-int move_mount_entry(struct syscall_trace_enter *ctx)
+SEC("ksyscall/move_mount")
+int BPF_KSYSCALL(move_mount_entry, int from_dfd, char *from_pathname,
+                        int to_dfd, char *to_pathname,
+                        unsigned int flags)
 {
 	union sys_arg arg = {};
 
-	arg.move_mount.from_dfd = (int)ctx->args[0];
-	arg.move_mount.from_pathname = (const char *)ctx->args[1];
-	arg.move_mount.to_dfd = (int)ctx->args[2];
-	arg.move_mount.to_pathname = (const char *)ctx->args[3];
+	arg.move_mount.from_dfd = from_dfd;
+	arg.move_mount.from_pathname = from_pathname;
+	arg.move_mount.to_dfd = to_dfd;
+	arg.move_mount.to_pathname = to_pathname;
 
 	return probe_entry(&arg, MOVE_MOUNT);
 }
 
-SEC("tracepoint/syscalls/sys_exit_move_mount")
-int move_mount_exit(struct syscall_trace_exit *ctx)
+SEC("kretsyscall/move_mount")
+int BPF_KRETPROBE(move_mount_exit, int rc)
 {
-	return probe_exit(ctx, (int)ctx->ret);
+	return probe_exit(ctx, rc);
 }
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";

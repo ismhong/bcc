@@ -492,11 +492,12 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
+	/* FIXME: Use general way to check syscal exists or not */
 	/**
 	 * kernel commit 24dcb3d90a1f ("vfs: syscall: Add fsopen() to prepare
 	 * for superblock creation") v5.1-rc1-5-g24dcb3d90a1f
 	 */
-	if (!tracepoint_exists("syscalls", "sys_enter_fsopen")) {
+	if (!kprobe_exists("__arm64_sys_fsopen")) {
 		bpf_program__set_autoload(obj->progs.fsopen_entry, false);
 		bpf_program__set_autoload(obj->progs.fsopen_exit, false);
 	}
@@ -505,7 +506,7 @@ int main(int argc, char **argv)
 	 * kernel commit ecdab150fddb ("vfs: syscall: Add fsconfig() for
 	 * configuring and managing a context") v5.1-rc1-7-gecdab150fddb
 	 */
-	if (!tracepoint_exists("syscalls", "sys_enter_fsconfig")) {
+	if (!kprobe_exists("__arm64_sys_fsconfig")) {
 		bpf_program__set_autoload(obj->progs.fsconfig_entry, false);
 		bpf_program__set_autoload(obj->progs.fsconfig_exit, false);
 	}
@@ -514,7 +515,7 @@ int main(int argc, char **argv)
 	 * kernel commit 93766fbd2696 ("vfs: syscall: Add fsmount() to create
 	 * a mount for a superblock") v5.1-rc1-8-g93766fbd2696
 	 */
-	if (!tracepoint_exists("syscalls", "sys_enter_fsmount")) {
+	if (!kprobe_exists("__arm64_sys_fsmount")) {
 		bpf_program__set_autoload(obj->progs.fsmount_entry, false);
 		bpf_program__set_autoload(obj->progs.fsmount_exit, false);
 	}
@@ -523,7 +524,7 @@ int main(int argc, char **argv)
 	 * kernel commit 2db154b3ea8e ("vfs: syscall: Add move_mount(2) to
 	 * move mounts around") v5.1-rc1-2-g2db154b3ea8e
 	 */
-	if (!tracepoint_exists("syscalls", "sys_enter_move_mount")) {
+	if (!kprobe_exists("__arm64_sys_move_mount")) {
 		bpf_program__set_autoload(obj->progs.move_mount_entry, false);
 		bpf_program__set_autoload(obj->progs.move_mount_exit, false);
 	}
