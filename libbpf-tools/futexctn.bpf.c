@@ -48,14 +48,14 @@ struct {
 
 static struct hist initial_hist = {};
 
-SEC("tracepoint/syscalls/sys_enter_futex")
-int futex_enter(struct syscall_trace_enter *ctx)
+SEC("ksyscall/futex")
+int BPF_KSYSCALL(futex_enter, u32 *uaddr, int futex_op)
 {
 	struct val_t v = {};
 	u64 pid_tgid;
 	u32 tid;
 
-	if (((int)ctx->args[1] & FUTEX_CMD_MASK) != FUTEX_WAIT)
+	if (((int)futex_op & FUTEX_CMD_MASK) != FUTEX_WAIT)
 		return 0;
 
 	pid_tgid = bpf_get_current_pid_tgid();
@@ -64,7 +64,7 @@ int futex_enter(struct syscall_trace_enter *ctx)
 		return 0;
 	if (targ_tid && targ_tid != tid)
 		return 0;
-	v.uaddr = ctx->args[0];
+	v.uaddr = (u64)uaddr;
 	if (targ_lock && targ_lock != v.uaddr)
 		return 0;
 	v.ts = bpf_ktime_get_ns();
@@ -72,8 +72,8 @@ int futex_enter(struct syscall_trace_enter *ctx)
 	return 0;
 }
 
-SEC("tracepoint/syscalls/sys_exit_futex")
-int futex_exit(struct syscall_trace_exit *ctx)
+SEC("kretsyscall/futex")
+int BPF_KRETPROBE(futex_exit, long rc)
 {
 	u64 pid_tgid, slot, ts, min, max;
 	struct hist_key hkey = {};
@@ -86,7 +86,7 @@ int futex_exit(struct syscall_trace_exit *ctx)
 	vp = bpf_map_lookup_elem(&start, &pid_tgid);
 	if (!vp)
 		return 0;
-	if ((int)ctx->ret < 0)
+	if (rc < 0)
 		goto cleanup;
 
 	delta = (s64)(ts - vp->ts);
@@ -115,12 +115,14 @@ int futex_exit(struct syscall_trace_exit *ctx)
 	__sync_fetch_and_add(&histp->slots[slot], 1);
 	__sync_fetch_and_add(&histp->contended, 1);
 	__sync_fetch_and_add(&histp->total_elapsed, delta);
-	min = __sync_fetch_and_add(&histp->min, 0);
+	/* FIXME: Original implementation uses CAS operation to update min/max,
+	 * but it caused BPF verifier reject loading BPF code on 5.15/Android/arm64 */
+	min = histp->min;
 	if (!min || min > delta)
-		__sync_val_compare_and_swap(&histp->min, min, delta);
-	max = __sync_fetch_and_add(&histp->max, 0);
+		histp->min = delta;
+	max = histp->max;
 	if (max < delta)
-		__sync_val_compare_and_swap(&histp->max, max, delta);
+		histp->max = delta;
 	bpf_get_current_comm(&histp->comm, sizeof(histp->comm));
 
 cleanup:
