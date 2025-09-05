@@ -48,8 +48,8 @@ struct {
 
 static struct hist initial_hist = {};
 
-SEC("ksyscall/futex")
-int BPF_KSYSCALL(futex_enter, u32 *uaddr, int futex_op)
+static __always_inline
+int trace_futex_entry(u32 *uaddr, int futex_op)
 {
 	struct val_t v = {};
 	u64 pid_tgid;
@@ -72,8 +72,8 @@ int BPF_KSYSCALL(futex_enter, u32 *uaddr, int futex_op)
 	return 0;
 }
 
-SEC("kretsyscall/futex")
-int BPF_KRETPROBE(futex_exit, long rc)
+static __always_inline
+int trace_futex_exit(void *ctx, long rc)
 {
 	u64 pid_tgid, slot, ts, min, max;
 	struct hist_key hkey = {};
@@ -128,6 +128,30 @@ int BPF_KRETPROBE(futex_exit, long rc)
 cleanup:
 	bpf_map_delete_elem(&start, &pid_tgid);
 	return 0;
+}
+
+SEC("ksyscall/futex_time32")
+int BPF_KSYSCALL(futex_time32_enter, u32 *uaddr, int futex_op)
+{
+	return trace_futex_entry(uaddr, futex_op);
+}
+
+SEC("kretsyscall/futex_time32")
+int BPF_KRETPROBE(futex_time32_exit, long rc)
+{
+	return trace_futex_exit(ctx, rc);
+}
+
+SEC("ksyscall/futex")
+int BPF_KSYSCALL(futex_enter, u32 *uaddr, int futex_op)
+{
+	return trace_futex_entry(uaddr, futex_op);
+}
+
+SEC("kretsyscall/futex")
+int BPF_KRETPROBE(futex_exit, long rc)
+{
+	return trace_futex_exit(ctx, rc);
 }
 
 char LICENSE[] SEC("license") = "GPL";
