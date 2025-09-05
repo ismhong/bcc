@@ -39,6 +39,7 @@
 /memleak
 /mdflush
 /mountsnoop
+/netaggr
 /nfsdist
 /nfsslower
 /numamove
