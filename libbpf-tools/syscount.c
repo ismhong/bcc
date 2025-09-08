@@ -61,6 +61,9 @@ static const struct argp_option opts[] = {
 	{ "errno", 'e', "ERRNO", 0, "Trace only syscalls that return this error"
 				 "(numeric or EPERM, etc.)", 0 },
 	{ "list", 'l', NULL, 0, "Print list of recognized syscalls and exit", 0 },
+#ifdef __aarch64__
+    { "arm32", 'A', NULL, 0, "Use arm32 syscall table", 0 },
+#endif
 	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
 	{},
 };
@@ -79,6 +82,9 @@ static struct env {
 	pid_t pid;
 	char *cgroupspath;
 	bool cg;
+#ifdef __aarch64__
+	bool arm32;
+#endif
 } env = {
 	.top = 10,
 };
@@ -363,6 +369,11 @@ static error_t parse_arg(int key, char *arg, struct argp_state *state)
 	case 'l':
 		env.list_syscalls = true;
 		break;
+#ifdef __aarch64__
+	case 'A':
+		env.arm32 = true;
+		break;
+#endif
 	default:
 		return ARGP_ERR_UNKNOWN;
 	}
@@ -399,6 +410,11 @@ int main(int argc, char **argv)
 	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
 	if (err)
 		goto free_names;
+
+#ifdef __aarch64__
+	if (env.arm32)
+		set_arm32_syscall_table();
+#endif
 
 	if (env.list_syscalls) {
 		list_syscalls();
