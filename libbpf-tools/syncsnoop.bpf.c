@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2024 Tiago Ilieve
 #include "vmlinux.h"
+#include <bpf/bpf_core_read.h>
 #include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
 #include "syncsnoop.h"
 
 struct {
@@ -11,7 +13,7 @@ struct {
 } events SEC(".maps");
 
 
-static void __syscall(struct trace_event_raw_sys_enter *ctx,
+static void __syscall(void *ctx,
 		      enum sync_syscalls sys)
 {
 	struct event event = {};
@@ -22,38 +24,38 @@ static void __syscall(struct trace_event_raw_sys_enter *ctx,
 	bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &event, sizeof(event));
 }
 
-SEC("tracepoint/syscalls/sys_enter_sync")
-void tracepoint__syscalls__sys_enter_sync(struct trace_event_raw_sys_enter *ctx)
+SEC("ksyscall/sync")
+void BPF_KPROBE(sync)
 {
 	__syscall(ctx, SYS_SYNC);
 }
 
-SEC("tracepoint/syscalls/sys_enter_fsync")
-void tracepoint__syscalls__sys_enter_fsync(struct trace_event_raw_sys_enter *ctx)
+SEC("ksyscall/fsync")
+void BPF_KPROBE(fsync)
 {
 	__syscall(ctx, SYS_FSYNC);
 }
 
-SEC("tracepoint/syscalls/sys_enter_fdatasync")
-void tracepoint__syscalls__sys_enter_fdatasync(struct trace_event_raw_sys_enter *ctx)
+SEC("ksyscall/fdatasync")
+void BPF_KPROBE(fdatasync)
 {
 	__syscall(ctx, SYS_FDATASYNC);
 }
 
-SEC("tracepoint/syscalls/sys_enter_msync")
-void tracepoint__syscalls__sys_enter_msync(struct trace_event_raw_sys_enter *ctx)
+SEC("ksyscall/msync")
+void BPF_KPROBE(msync)
 {
 	__syscall(ctx, SYS_MSYNC);
 }
 
-SEC("tracepoint/syscalls/sys_enter_sync_file_range")
-void tracepoint__syscalls__sys_enter_sync_file_range(struct trace_event_raw_sys_enter *ctx)
+SEC("ksyscall/sync_file_range")
+void BPF_KPROBE(sync_file_range)
 {
 	__syscall(ctx, SYS_SYNC_FILE_RANGE);
 }
 
-SEC("tracepoint/syscalls/sys_enter_syncfs")
-void tracepoint__syscalls__sys_enter_syncfs(struct trace_event_raw_sys_enter *ctx)
+SEC("ksyscall/syncfs")
+void BPF_KPROBE(syncfs)
 {
 	__syscall(ctx, SYS_SYNCFS);
 }
