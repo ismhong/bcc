@@ -87,7 +87,8 @@ int BPF_KSYSCALL(execve_entry, const char *filename, const char *const *argv, co
 	event->args_count++;
 	#pragma unroll
 	for (i = 1; i < TOTAL_MAX_ARGS && i < max_args; i++) {
-		ret = bpf_probe_read_user(&argp, sizeof(argp), &argv[i]);
+		u32 argv_addr = (u32)argv + i*4;
+		ret = bpf_probe_read_user(&argp, sizeof(argp), (void *)argv_addr);
 		if (ret < 0)
 			return 0;
 
