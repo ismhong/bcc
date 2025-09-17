@@ -24,7 +24,7 @@ static void __syscall(void *ctx,
 	bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &event, sizeof(event));
 }
 
-SEC("ksyscall/sync")
+SEC("kprobe/sys_sync")
 void BPF_KPROBE(sync)
 {
 	__syscall(ctx, SYS_SYNC);
