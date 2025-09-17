@@ -225,13 +225,13 @@ static void print_map(struct ksyms *ksyms, struct syms_cache *syms_cache)
 		if (env.kernel_stack) {
 			if (bpf_map_lookup_elem(sfd, &next_key.kern_stack_id, ip) != 0)
 				fprintf(stderr, "    [Missed Kernel Stack]\n");
-			for (i = 0; i < env.perf_max_stack_depth && ip[i]; i++) {
+			for (i = 0; i < env.perf_max_stack_depth && ip[i]; i+=2) {
 				ksym = ksyms__map_addr(ksyms, ip[i]);
 				if (!env.verbose) {
 					printf("    %s\n", ksym ? ksym->name : "Unknown");
 				} else {
 					if (ksym)
-						printf("    #%-2d 0x%lx %s+0x%lx\n", idx++, ip[i], ksym->name, ip[i] - ksym->addr);
+						printf("    [%d/%d]#%-2d 0x%lx %s+0x%lx\n", i, env.perf_max_stack_depth, idx++, ip[i], ksym->name, ip[i] - ksym->addr);
 					else
 						printf("    #%-2d 0x%lx [unknown]\n", idx++, ip[i]);
 				}
@@ -252,7 +252,7 @@ static void print_map(struct ksyms *ksyms, struct syms_cache *syms_cache)
 				fprintf(stderr, "failed to get syms\n");
 				goto skip_ustack;
 			}
-			for (i = 0; i < env.perf_max_stack_depth && ip[i]; i++) {
+			for (i = 0; i < env.perf_max_stack_depth && ip[i]; i+=2) {
 				if (!env.verbose) {
 					sym = syms__map_addr(syms, ip[i]);
 					if (sym)

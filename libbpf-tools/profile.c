@@ -13,6 +13,7 @@
 #include <inttypes.h>
 #include <unistd.h>
 #include <time.h>
+#include <limits.h>
 #include <linux/perf_event.h>
 #include <asm/unistd.h>
 #include <bpf/libbpf.h>
@@ -384,11 +385,11 @@ static void print_stacktrace(unsigned long *ip, symname_fn_t symname, struct fmt
 	int i;
 
 	if (!f->folded) {
-		for (i = 0; ip[i] && i < env.perf_max_stack_depth; i++)
+		for (i = 0; ip[i] && i < env.perf_max_stack_depth; i+=2)
 			pr_format(symname(ip[i]), f);
 		return;
 	} else {
-		for (i = env.perf_max_stack_depth - 1; i >= 0; i--) {
+		for (i = env.perf_max_stack_depth - 1; i >= 0; i-=2) {
 			if (!ip[i])
 				continue;
 

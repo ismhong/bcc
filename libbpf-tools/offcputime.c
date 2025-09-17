@@ -236,7 +236,7 @@ static void print_map(struct ksyms *ksyms, struct syms_cache *syms_cache,
 			goto print_ustack;
 		}
 
-		for (i = 0; i < env.perf_max_stack_depth && ip[i]; i++) {
+		for (i = 0; i < env.perf_max_stack_depth && ip[i]; i+=2) {
 			ksym = ksyms__map_addr(ksyms, ip[i]);
 			if (!env.verbose) {
 				printf("    %s\n", ksym ? ksym->name : "unknown");
@@ -262,12 +262,12 @@ print_ustack:
 			if (!env.verbose) {
 				fprintf(stderr, "failed to get syms\n");
 			} else {
-				for (i = 0; i < env.perf_max_stack_depth && ip[i]; i++)
+				for (i = 0; i < env.perf_max_stack_depth && ip[i]; i+=2)
 					printf("    #%-2d 0x%016lx [unknown]\n", idx++, ip[i]);
 			}
 			goto skip_ustack;
 		}
-		for (i = 0; i < env.perf_max_stack_depth && ip[i]; i++) {
+		for (i = 0; i < env.perf_max_stack_depth && ip[i]; i+=2) {
 			if (!env.verbose) {
 				sym = syms__map_addr(syms, ip[i]);
 				if (sym)

@@ -189,7 +189,7 @@ static void print_map(struct ksyms *ksyms, struct wakeuptime_bpf *obj)
 		if (err < 0) {
 			fprintf(stderr, "missed kernel stack: %d\n", err);
 		}
-		for (i = 0; i < env.perf_max_stack_depth && ip[i]; i++) {
+		for (i = 0; i < env.perf_max_stack_depth && ip[i]; i+=2) {
 			ksym = ksyms__map_addr(ksyms, ip[i]);
 			if (ksym)
 				printf("	%-16lx %s+0x%lx\n", ip[i], ksym->name, ip[i] - ksym->addr);

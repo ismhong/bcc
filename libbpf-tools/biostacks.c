@@ -116,7 +116,7 @@ void print_map(struct ksyms *ksyms, struct partitions *partitions, int fd)
 			partition ? partition->name : "Unknown");
 		num_stack = next_key.kern_stack_size /
 			sizeof(next_key.kern_stack[0]);
-		for (i = 0; i < num_stack; i++) {
+		for (i = 0; i < num_stack; i+=2) {
 			ksym = ksyms__map_addr(ksyms, next_key.kern_stack[i]);
 			printf("%s\n", ksym ? ksym->name : "Unknown");
 		}
