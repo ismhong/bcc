@@ -302,7 +302,7 @@ int main(int argc, char **argv)
 
 	printf("Tracing TCP RTT");
 	if (env.duration)
-		printf(" for %ld secs.\n", env.duration);
+		printf(" for %lld secs.\n", env.duration);
 	else
 		printf("... Hit Ctrl-C to end.\n");
 

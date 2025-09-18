@@ -675,7 +675,7 @@ int event_wait(int fd, uint64_t expected_event)
 	}
 
 	if (event != expected_event) {
-		fprintf(stderr, "read event %lu, expected %lu\n", event, expected_event);
+		fprintf(stderr, "read event %llu, expected %llu\n", event, expected_event);
 
 		return 1;
 	}
@@ -794,9 +794,9 @@ void print_stack_frames_by_ksyms()
 
 		const struct ksym *ksym = ksyms__map_addr(ksyms, addr);
 		if (ksym)
-			printf("\t%zu [<%016lx>] %s+0x%lx\n", i, addr, ksym->name, addr - ksym->addr);
+			printf("\t%zu [<%016llx>] %s+0x%llx\n", i, addr, ksym->name, addr - ksym->addr);
 		else
-			printf("\t%zu [<%016lx>] <%s>\n", i, addr, "null sym");
+			printf("\t%zu [<%016llx>] <%s>\n", i, addr, "null sym");
 	}
 }
 
@@ -817,12 +817,12 @@ void print_stack_frames_by_syms_cache()
 		struct sym_info sinfo;
 		int ret = syms__map_addr_dso(syms, addr, &sinfo);
 		if (ret == 0) {
-			printf("\t%zu [<%016lx>]", i, addr);
+			printf("\t%zu [<%016llx>]", i, addr);
 			if (sinfo.sym_name)
 				printf(" %s+0x%lx", sinfo.sym_name, sinfo.sym_offset);
 			printf(" [%s]\n", sinfo.dso_name);
 		} else {
-			printf("\t%zu [<%016lx>] <%s>\n", i, addr, "null sym");
+			printf("\t%zu [<%016llx>] <%s>\n", i, addr, "null sym");
 		}
 	}
 }
@@ -838,7 +838,7 @@ int print_stack_frames(struct allocation *allocs, size_t nr_allocs, int stack_tr
 		if (env.show_allocs) {
 			struct allocation_node* it = alloc->allocations;
 			while (it != NULL) {
-				printf("\taddr = %#lx size = %zu\n", it->address, it->size);
+				printf("\taddr = %#llx size = %zu\n", it->address, it->size);
 				it = it->next;
 			}
 		}

@@ -208,7 +208,7 @@ int main(int argc, char **argv)
 
 	printf("Tracing direct reclaim events");
 	if (env.duration)
-		printf(" for %ld secs.\n", env.duration);
+		printf(" for %lld secs.\n", env.duration);
 	else
 		printf("... Hit Ctrl-C to end.\n");
 	printf("%-8s %-16s %-6s %8s %5s",

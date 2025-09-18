@@ -240,7 +240,7 @@ int main(int argc, char **argv)
 					obj->progs.on_cache_ref, rlinks))
 		goto cleanup;
 
-	printf("Running for %ld seconds or Hit Ctrl-C to end.\n", env.duration);
+	printf("Running for %lld seconds or Hit Ctrl-C to end.\n", env.duration);
 
 	signal(SIGINT, sig_handler);
 

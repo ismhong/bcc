@@ -492,7 +492,7 @@ static char *symname(struct ksyms *ksyms, uint64_t pc, char *buf, size_t n)
 
 	if (!ksym)
 		return "Unknown";
-	snprintf(buf, n, "%s+0x%lx", ksym->name, pc - ksym->addr);
+	snprintf(buf, n, "%s+0x%llx", ksym->name, pc - ksym->addr);
 	return buf;
 }
 

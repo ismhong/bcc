@@ -296,7 +296,7 @@ static int print_stat(struct tcptop_bpf *obj)
 		snprintf(saddr_port, size, "%s:%d", saddr, key->lport);
 		snprintf(daddr_port, size, "%s:%d", daddr, key->dport);
 
-		printf("%-*d %-12.12s %-*s %-*s %6ld %6ld\n",
+		printf("%-*d %-12.12s %-*s %-*s %6zu %6zu\n",
 					 pid_maxlen, key->pid, key->name,
 					 column_width, saddr_port,
 					 column_width, daddr_port,

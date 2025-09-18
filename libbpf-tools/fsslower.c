@@ -340,7 +340,7 @@ static void print_headers()
 		printf("Tracing %s operations", fs);
 
 	if (duration)
-		printf(" for %ld secs.\n", duration);
+		printf(" for %lld secs.\n", duration);
 	else
 		printf("... Hit Ctrl-C to end.\n");
 
