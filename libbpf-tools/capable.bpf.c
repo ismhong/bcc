@@ -32,6 +32,11 @@ struct unique_key {
 	u64 cgroupid;
 };
 
+struct stack_ids_val {
+	s32 kern_stack_id;
+	s32 user_stack_id;
+};
+
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 10240);
@@ -71,17 +76,28 @@ struct {
 	__type(value, u64);
 } seen SEC(".maps");
 
-SEC("kprobe/cap_capable")
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 10240);
+	__type(key, u32);
+	__type(value, struct stack_ids_val);
+} stack_ids SEC(".maps");
+
+SEC("kprobe/cap_capable+20")
 int BPF_KPROBE(kprobe__cap_capable_entry, const struct cred *cred, struct user_namespace *targ_ns, int cap, int cap_opt)
 {
 	__u32 pid;
 	__u64 pid_tgid;
+	__u32 tid;
+
+	bpf_printk("cap_capable");
 
 	if (filter_cg && !bpf_current_task_under_cgroup(&cgroup_map, 0))
 		return 0;
 
 	pid_tgid = bpf_get_current_pid_tgid();
 	pid = pid_tgid >> 32;
+	tid = (__u32)pid_tgid;
 
 	if (pid == my_pid)
 		return 0;
@@ -93,6 +109,19 @@ int BPF_KPROBE(kprobe__cap_capable_entry, const struct cred *cred, struct user_n
 	args.cap = cap;
 	args.cap_opt = cap_opt;
 	bpf_map_update_elem(&start, &pid_tgid, &args, 0);
+
+	if (kernel_stack || user_stack) {
+		struct stack_ids_val stacks = {};
+
+		stacks.kern_stack_id = -1;
+		stacks.user_stack_id = -1;
+		if (user_stack)
+			stacks.user_stack_id = bpf_get_stackid(ctx, &stackmap, BPF_F_USER_STACK);
+		if (kernel_stack)
+			stacks.kern_stack_id = bpf_get_stackid(ctx, &stackmap, 0);
+
+		bpf_map_update_elem(&stack_ids, &tid, &stacks, 0);
+	}
 
 	return 0;
 }
@@ -143,16 +172,20 @@ int BPF_KRETPROBE(kprobe__cap_capable_exit)
 	}
 
 	if (kernel_stack || user_stack) {
-		i_key.pid = pid_tgid >> 32;
-		i_key.tgid = pid_tgid;
+		struct stack_ids_val *stacks;
+		__u32 tid = (__u32)pid_tgid;
 
-		i_key.kern_stack_id = i_key.user_stack_id = -1;
-		if (user_stack)
-			i_key.user_stack_id = bpf_get_stackid(ctx, &stackmap, BPF_F_USER_STACK);
-		if (kernel_stack)
-			i_key.kern_stack_id = bpf_get_stackid(ctx, &stackmap, 0);
+		stacks = bpf_map_lookup_elem(&stack_ids, &tid);
+		if (stacks) {
+			i_key.pid = pid_tgid >> 32;
+			i_key.tgid = pid_tgid;
 
-		bpf_map_update_elem(&info, &i_key, &event, BPF_NOEXIST);
+			i_key.kern_stack_id = stacks->kern_stack_id;
+			i_key.user_stack_id = stacks->user_stack_id;
+
+			bpf_map_update_elem(&info, &i_key, &event, BPF_NOEXIST);
+			bpf_map_delete_elem(&stack_ids, &tid);
+		}
 	}
 	bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &event, sizeof(event));
 
