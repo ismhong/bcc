@@ -50,6 +50,7 @@ APPS = \
 	bitesize \
 	cachestat \
 	capable \
+	cmasnoop \
 	cpudist \
 	cpufreq \
 	drsnoop \
