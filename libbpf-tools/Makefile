@@ -52,6 +52,7 @@ APPS = \
 	capable \
 	cmasnoop \
 	cmatrack \
+	cmatop \
 	cpudist \
 	cpufreq \
 	drsnoop \
