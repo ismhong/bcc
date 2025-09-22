@@ -52,6 +52,7 @@ APPS = \
 	cachestat \
 	capable \
 	cmasnoop \
+	cmatrack \
 	cpudist \
 	cpufreq \
 	drsnoop \
