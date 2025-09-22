@@ -78,6 +78,7 @@ APPS = \
 	oomkill \
 	profile \
 	readahead \
+	rpcsnoop \
 	runqlat \
 	runqlen \
 	runqslower \
