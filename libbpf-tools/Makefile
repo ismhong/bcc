@@ -61,6 +61,7 @@ APPS = \
 	exitsnoop \
 	filelife \
 	filetop \
+	linuxfiletop \
 	fsdist \
 	fsslower \
 	funclatency \
