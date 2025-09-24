@@ -81,6 +81,7 @@ APPS = \
 	profile \
 	readahead \
 	rpcsnoop \
+	rtkheaptop \
 	runqlat \
 	runqlen \
 	runqslower \
