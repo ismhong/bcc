@@ -71,6 +71,7 @@ APPS = \
 	ksnoop \
 	llcstat \
 	mdflush \
+	mmctop \
 	mountsnoop \
 	netaggr \
 	numamove \
