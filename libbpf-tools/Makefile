@@ -103,6 +103,7 @@ APPS = \
 	tcptop \
 	vfsstat \
 	wakeuptime \
+	whoentersmc \
 	$(BZ_APPS) \
 	#
 
