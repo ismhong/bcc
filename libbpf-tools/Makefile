@@ -83,6 +83,7 @@ APPS = \
 	rpcsnoop \
 	rpcdist \
 	rpctop \
+	rpcundone \
 	rtkheaptop \
 	runqlat \
 	runqlen \
