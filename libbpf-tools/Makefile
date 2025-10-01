@@ -90,6 +90,7 @@ APPS = \
 	runqslower \
 	schedblockedtop \
 	smctop \
+	cputop \
 	sigsnoop \
 	slabratetop \
 	softirqs \
