@@ -110,6 +110,7 @@ APPS = \
 	vfsstat \
 	vmoom \
 	wakeuptime \
+	vmallocleak \
 	whoentersmc \
 	$(BZ_APPS) \
 	#
