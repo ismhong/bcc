@@ -107,6 +107,7 @@ APPS = \
 	tcpsynbl \
 	tcptop \
 	vfsstat \
+	vmoom \
 	wakeuptime \
 	whoentersmc \
 	$(BZ_APPS) \
