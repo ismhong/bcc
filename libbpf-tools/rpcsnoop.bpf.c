@@ -246,10 +246,13 @@ int BPF_KPROBE(__rtk_rpmsg_send, struct rtk_rpmsg_channel *channel,
 		bpf_printk("rpcsnoop: send probe_read_kernel(rpc_info) failed\n");
 		return 0;
 	}
-	rcpu = BPF_CORE_READ(channel, rcpu);
-	info = BPF_CORE_READ(rcpu, info);
+	int big_endian_val;
 
-	if (BPF_CORE_READ(info, big_endian)) {
+	bpf_probe_read_kernel(&rcpu, sizeof(rcpu), &channel->rcpu);
+	bpf_probe_read_kernel(&info, sizeof(info), &rcpu->info);
+	bpf_probe_read_kernel(&big_endian_val, sizeof(big_endian_val), &info->big_endian);
+
+	if (big_endian_val) {
 		buf.programID = bpf_ntohl(rpc_info.programID);
 		buf.versionID = bpf_ntohl(rpc_info.versionID);
 		buf.procedureID = bpf_ntohl(rpc_info.procedureID);
@@ -279,8 +282,11 @@ int BPF_KPROBE(__rtk_rpmsg_send, struct rtk_rpmsg_channel *channel,
 
 	if (buf.programID == RPC_PG_ID_REPLYID)
 		buf.rpc_num = 0;
-	else
-		buf.rpc_num = BPF_CORE_READ(info, id);
+	else {
+		int id_val;
+		bpf_probe_read_kernel(&id_val, sizeof(id_val), &info->id);
+		buf.rpc_num = id_val;
+	}
 
 	bpf_map_update_elem(&rpc_data_map, &pid, &buf, BPF_ANY);
 
@@ -347,11 +353,17 @@ int BPF_KPROBE(get_ring_data, struct rtk_rpmsg_channel *channel, int *retSize,
 	struct rtk_rcpu *rcpu;
 	const struct remote_cpu_info *info;
 
-	rcpu = BPF_CORE_READ(channel, rcpu);
-	info = BPF_CORE_READ(rcpu, info);
+	int id_val;
+	int big_endian_val;
 
-	rcpu_info.rpc_num = BPF_CORE_READ(info, id);
-	rcpu_info.big_endian = BPF_CORE_READ(info, big_endian);
+	bpf_probe_read_kernel(&rcpu, sizeof(rcpu), &channel->rcpu);
+	bpf_probe_read_kernel(&info, sizeof(info), &rcpu->info);
+
+	bpf_probe_read_kernel(&id_val, sizeof(id_val), &info->id);
+	rcpu_info.rpc_num = id_val;
+
+	bpf_probe_read_kernel(&big_endian_val, sizeof(big_endian_val), &info->big_endian);
+	rcpu_info.big_endian = big_endian_val;
 
 	bpf_map_update_elem(&rcpu_data_map, &pid, &rcpu_info, BPF_ANY);
 
