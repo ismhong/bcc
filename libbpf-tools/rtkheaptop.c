@@ -559,7 +559,7 @@ int main(int argc, char **argv)
 						}
 
 						total_alloc += map_entries[i].value.size;
-						printf("%-16s %-10lx %12llu %15u %8u %5u\n",
+						printf("%-16s 0x%-10lx %12llu %15u %8u %5u\n",
 								map_entries[i].key.caller, map_entries[i].key.flags,
 								map_entries[i].value.size, map_entries[i].value.max_alloc_latency,
 								map_entries[i].value.success, map_entries[i].value.fail);
@@ -603,7 +603,7 @@ int main(int argc, char **argv)
 					}
 
 					total_alloc += map_entries[i].value.size;
-					printf("%-16s %-10lx %12llu %15u %8u %5u\n",
+					printf("%-16s 0x%-10lx %12llu %15u %8u %5u\n",
 							map_entries[i].key.caller, map_entries[i].key.flags,
 							map_entries[i].value.size, map_entries[i].value.max_alloc_latency,
 							map_entries[i].value.success, map_entries[i].value.fail);
