@@ -80,6 +80,7 @@ APPS = \
 	numamove \
 	offcputime \
 	oomkill \
+	pageowner \
 	pagealloctop \
 	profile \
 	readahead \
