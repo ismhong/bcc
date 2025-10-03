@@ -67,6 +67,7 @@ APPS = \
 	fsdist \
 	fsslower \
 	funclatency \
+	funcslower \
 	gethostlatency \
 	hardirqs \
 	javagc \
