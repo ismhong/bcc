@@ -99,6 +99,7 @@ APPS = \
 	slabratetop \
 	softirqs \
 	solisten \
+	stackcount \
 	statsnoop \
 	syncsnoop \
 	syscount \
