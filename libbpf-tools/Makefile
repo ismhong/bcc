@@ -79,6 +79,7 @@ APPS = \
 	numamove \
 	offcputime \
 	oomkill \
+	pagealloctop \
 	profile \
 	readahead \
 	rpcsnoop \
