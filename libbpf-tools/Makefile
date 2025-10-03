@@ -113,6 +113,7 @@ APPS = \
 	wakeuptime \
 	vmallocleak \
 	whoentersmc \
+	loadavg \
 	$(BZ_APPS) \
 	#
 
