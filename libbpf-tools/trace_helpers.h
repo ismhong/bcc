@@ -1,4 +1,20 @@
 /* SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause) */
+
+#include <stdio.h>
+
+/*
+ * The libbpf-tools print messages through printf(), which is fully
+ * buffered when stdout is redirected to a file or pipe. This is not
+ * ideal for tracing tools, as we want to see the output in real-time.
+ *
+ * This constructor function sets stdout to be line-buffered, so that
+ * the output is flushed after each newline.
+ */
+static void __attribute__((constructor)) set_stdout_line_buffered(void)
+{
+	setvbuf(stdout, NULL, _IOLBF, 0);
+}
+
 #ifndef __TRACE_HELPERS_H
 #define __TRACE_HELPERS_H
 
