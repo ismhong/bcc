@@ -62,6 +62,7 @@ APPS = \
 	exitsnoop \
 	filelife \
 	filetop \
+	forksnoop \
 	gpumemtop \
 	linuxfiletop \
 	fsdist \
