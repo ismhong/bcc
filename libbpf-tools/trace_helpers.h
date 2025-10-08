@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause) */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /*
  * The libbpf-tools print messages through printf(), which is fully
@@ -13,6 +15,35 @@
 static void __attribute__((constructor)) set_stdout_line_buffered(void)
 {
 	setvbuf(stdout, NULL, _IOLBF, 0);
+}
+
+static void __attribute__((constructor)) platform_check(void)
+{
+	const char *soc_files[] = {
+		"/sys/devices/soc0/chip_type",
+		"/sys/devices/soc0/family",
+		"/sys/devices/soc0/machine",
+		"/sys/devices/soc0/soc_id"
+	};
+	char buffer[1024] = {0};
+	size_t len = 0;
+	FILE *fp;
+	size_t num_files = sizeof(soc_files) / sizeof(soc_files[0]);
+
+	for (size_t i = 0; i < num_files; i++) {
+		fp = fopen(soc_files[i], "r");
+		if (fp) {
+			len += fread(buffer + len, 1, sizeof(buffer) - len - 1, fp);
+			fclose(fp);
+		}
+	}
+
+	if (strstr(buffer, "Realtek") && strstr(buffer, "RTD")) {
+		return;
+	}
+
+	fprintf(stderr, "libbpf-tools only support Realtek devices\n");
+	exit(1);
 }
 
 #ifndef __TRACE_HELPERS_H
