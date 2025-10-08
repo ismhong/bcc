@@ -33,6 +33,64 @@ struct {
 	__type(value, struct session_uuid_t);
 } session_uuid_hash SEC(".maps");
 
+// include/linux/tee_drv.h
+// NOTE: DHC make proprietary changes to this strcuture
+struct tee_shm_local {
+	struct tee_device *teedev;
+	struct tee_context *ctx;
+	phys_addr_t paddr;
+	void *kaddr;
+	size_t size;
+	unsigned int offset;
+	struct page **pages;
+	size_t num_pages;
+	refcount_t refcount;
+	u32 flags;
+	int id;
+};
+
+struct optee_msg_param_value_local {
+	u64 a;
+	u64 b;
+	u64 c;
+};
+
+struct optee_msg_param_local {
+	u64 attr;
+	union {
+		struct optee_msg_param_tmem tmem;
+		struct optee_msg_param_rmem rmem;
+		struct optee_msg_param_fmem fmem;
+		struct optee_msg_param_value_local value;
+		u8 octets[24];
+	} u;
+};
+
+struct optee_msg_arg_local {
+	u32 cmd;
+	u32 func;
+	u32 session;
+	u32 cancel_id;
+	u32 pad;
+	u32 ret;
+	u32 ret_origin;
+	u32 num_params;
+
+	/* num_params tells the actual number of element in params */
+	struct optee_msg_param_local params[];
+};
+
+struct tee_ioctl_invoke_arg_local {
+	__u32 func;
+	__u32 session;
+	__u32 cancel_id;
+	__u32 ret;
+	__u32 ret_origin;
+	__u32 num_params;
+	/* num_params tells the actual number of element in params */
+	struct tee_ioctl_param params[];
+};
+
 static inline int back_ree_world(void *ctx)
 {
 	struct candidate_table *cand_t;
@@ -200,12 +258,14 @@ int BPF_KPROBE(optee_open_session_entry)
 }
 
 SEC("kprobe/tee_shm_free")
-int BPF_KPROBE(tee_shm_free_entry, struct tee_shm *shm)
+int BPF_KPROBE(tee_shm_free_entry, struct tee_shm_local *shm)
 {
 	struct open_session_t *open_session_p;
 	__u64 pid_tgid = bpf_get_current_pid_tgid();
 	struct open_session_t open_session_zero = {};
 	__u32 upper, lower, session, pid = pid_tgid;
+	struct optee_msg_arg_local *msg_arg;
+	u64 val_a;
 
 	open_session_p = bpf_map_lookup_or_try_init(&open_session_entry_hash, &pid, &open_session_zero);
 	if (!open_session_p) {
@@ -217,14 +277,17 @@ int BPF_KPROBE(tee_shm_free_entry, struct tee_shm *shm)
 		return 0;
 	}
 
-	void *kaddr = BPF_CORE_READ(shm, kaddr);
-	struct optee_msg_arg *msg_arg = (struct optee_msg_arg *)kaddr;
+	void *kaddr = BPF_PROBE_READ(shm, kaddr);
+	if (!kaddr)
+		return 0;
 
-	__u64 val_a = BPF_CORE_READ(msg_arg, params[0].u.value.a);
+	msg_arg = (struct optee_msg_arg_local *)kaddr;
+	val_a = BPF_PROBE_READ(msg_arg, params[0].u.value.a);
+
 	upper = __builtin_bswap32(val_a >> 32);
 	lower = __builtin_bswap32(val_a);
 
-	session = BPF_CORE_READ(msg_arg, session);
+	session = BPF_PROBE_READ(msg_arg, session);
 
 	struct session_uuid_t *session_uuid_p;
 	struct session_uuid_t uuid_zero = {};
@@ -244,13 +307,13 @@ int BPF_KPROBE(tee_shm_free_entry, struct tee_shm *shm)
 
 SEC("kprobe/optee_invoke_func")
 int BPF_KPROBE(optee_invoke_func_entry, struct tee_context *context,
-		struct tee_ioctl_invoke_arg *arg)
+		struct tee_ioctl_invoke_arg_local *arg)
 {
 	struct session_uuid_t *session_uuid_p;
 	struct optee_val_t optee_val;
 	struct session_uuid_t uuid_zero = {};
 	__u32 cpu_idx = bpf_get_smp_processor_id();
-	__u32 session = BPF_CORE_READ(arg, session);
+	__u32 session = BPF_PROBE_READ(arg, session);
 
 	session_uuid_p = bpf_map_lookup_or_try_init(&session_uuid_hash, &session, &uuid_zero);
 	if (!session_uuid_p) {
@@ -262,7 +325,7 @@ int BPF_KPROBE(optee_invoke_func_entry, struct tee_context *context,
 	optee_val.timeMid = session_uuid_p->timeMid;
 	optee_val.timeHiAndVersion = session_uuid_p->timeHiAndVersion;
 	optee_val.session = session;
-	optee_val.func = BPF_CORE_READ(arg, func);
+	optee_val.func = BPF_PROBE_READ(arg, func);
 
 	bpf_map_update_elem(&optee_candidate, &cpu_idx, &optee_val, BPF_ANY);
 
