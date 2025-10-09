@@ -288,10 +288,14 @@ int main(int argc, char **argv)
 		bpf_program__set_autoload(obj->progs.tee_shm_free_entry, false);
 		bpf_program__set_autoload(obj->progs.optee_invoke_func_entry, false);
 		bpf_program__set_autoload(obj->progs.optee_invoke_func_exit, false);
+		bpf_program__set_autoload(obj->progs.optee_close_session_entry, false);
+		bpf_program__set_autoload(obj->progs.optee_close_session_exit, false);
 	} else {
 		bpf_program__set_autoload(obj->progs.optee_open_session_exit_tp, false);
 		bpf_program__set_autoload(obj->progs.optee_invoke_func_entry_tp, false);
 		bpf_program__set_autoload(obj->progs.optee_invoke_func_exit_tp, false);
+		bpf_program__set_autoload(obj->progs.optee_close_session_entry_tp, false);
+		bpf_program__set_autoload(obj->progs.optee_close_session_exit_tp, false);
 	}
 
 	if (!kprobe_exists("handle_IPI"))

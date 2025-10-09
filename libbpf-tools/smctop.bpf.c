@@ -174,6 +174,24 @@ int optee_open_session_exit_tp(struct trace_event_raw_optee_open_session_exit *c
 	return 0;
 }
 
+SEC("tracepoint/optee/optee_close_session_entry")
+int optee_close_session_entry_tp(void *ctx)
+{
+	if (ftrace)
+		bpf_printk("optee_close_session func entry");
+
+	return 0;
+}
+
+SEC("tracepoint/optee/optee_close_session_exit")
+int optee_close_session_exit_tp(void *ctx)
+{
+	if (ftrace)
+		bpf_printk("optee_close_session func exit");
+
+	return 0;
+}
+
 struct trace_event_raw_optee_invoke_func_entry {
 	unsigned long long dev;
 	unsigned int session;
@@ -314,6 +332,24 @@ int BPF_KPROBE(optee_open_session_entry)
 
 	if (ftrace)
 		bpf_printk("optee_open_session func entry");
+
+	return 0;
+}
+
+SEC("kprobe/optee_close_session")
+int BPF_KPROBE(optee_close_session_entry)
+{
+	if (ftrace)
+		bpf_printk("optee_close_session func entry");
+
+	return 0;
+}
+
+SEC("kretprobe/optee_close_session")
+int BPF_KRETPROBE(optee_close_session_exit)
+{
+	if (ftrace)
+		bpf_printk("optee_close_session func exit");
 
 	return 0;
 }
@@ -533,14 +569,14 @@ static inline int sum_duration(u64 pid_tgid, u32 next_pid, u32 smc_call_pid)
 		return 0;
 
 	if (next_pid != smc_call_pid)
-		goto BAIL;
+		goto failed;
 
 	struct task_sched_in *data = bpf_map_lookup_elem(&offcpu_start, &next_pid);
 	if (!data || !data->ts)
-		goto BAIL;
+		goto failed;
 
 	if (ts < data->ts)
-		goto BAIL;
+		goto failed;
 
 	u64 delta = (ts - data->ts) / 1000;
 	data->ts = 0;
@@ -554,7 +590,7 @@ static inline int sum_duration(u64 pid_tgid, u32 next_pid, u32 smc_call_pid)
 	if (delta > smc_start_p->schedout_max_latency)
 		smc_start_p->schedout_max_latency = delta;
 
-BAIL:
+failed:
 	if (pid != smc_call_pid)
 		return 0;
 
@@ -595,6 +631,12 @@ int sched_switch_tp(struct sched_switch_ctx *ctx)
 		pid = pid_tgid;
 		if ((smc_call_pid == pid) || (smc_call_pid == next_pid))
 			sum_duration(pid_tgid, next_pid, smc_call_pid);
+		if (ftrace) {
+			bpf_printk("schedule_exit : prev_state=%lld prev_prio=%d",
+					ctx->prev_state, ctx->prev_prio);
+			bpf_printk("schedule_entry: next_comm=%s next_pid=%d next_prio=%d",
+					ctx->next_comm, next_pid, ctx->next_prio);
+		}
 	}
 
 	return 0;
@@ -628,6 +670,8 @@ int irq_handler_entry_tp(struct irq_handler_entry_ctx *ctx)
 				u64 ts = bpf_ktime_get_ns();
 				bpf_map_update_elem(&irq_start, &pid, &ts, BPF_ANY);
 			}
+			if (ftrace)
+				bpf_printk("domain_irq_entry irq=%d name=%s", ctx->irq, ctx->name);
 		}
 	}
 
@@ -681,6 +725,13 @@ int irq_handler_exit_tp(struct irq_handler_exit_ctx *ctx)
 		}
 	}
 
+	if (ftrace) {
+		if (delta)
+			bpf_printk("domain_irq_exit irq=%d, ISR latency(us) = %llu", ctx->irq, delta);
+		else
+			bpf_printk("domain_irq_exit irq=%d", ctx->irq);
+	}
+
 	return 0;
 }
 
@@ -704,6 +755,8 @@ int BPF_KPROBE(inter_processor_irq_entry)
 				bpf_map_update_elem(&irq_start, &pid, &ts, BPF_ANY);
 			}
 		}
+		if (ftrace)
+			bpf_printk("inter_processor_irq_entry");
 	}
 
 	return 0;
