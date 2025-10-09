@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <limits.h>
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
 #include "funcslower.h"
