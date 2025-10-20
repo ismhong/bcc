@@ -54,6 +54,7 @@ APPS = \
 	cmasnoop \
 	cmatrack \
 	cmatop \
+	cpuidle \
 	cpudist \
 	cpufreq \
 	drsnoop \
