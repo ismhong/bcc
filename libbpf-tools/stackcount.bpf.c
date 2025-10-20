@@ -39,6 +39,11 @@ static int trace_count(void *ctx)
 	struct key_t key = {};
 	s32 kern_stack_id = -1, user_stack_id = -1;
 
+	if (per_pid) {
+		key.tgid = tgid;
+		bpf_get_current_comm(&key.name, sizeof(key.name));
+	}
+
 	if (!user_stacks_only)
 		kern_stack_id = bpf_get_stackid(ctx, &stack_traces, 0);
 
@@ -50,7 +55,7 @@ static int trace_count(void *ctx)
 
 	u64 *count;
 
-		count = bpf_map_lookup_elem(&counts, &key);
+	count = bpf_map_lookup_elem(&counts, &key);
 	if (count) {
 		__sync_fetch_and_add(count, 1);
 	} else {
