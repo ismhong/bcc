@@ -648,8 +648,14 @@ struct irq_handler_entry_ctx {
 	unsigned char common_preempt_count;
 	int common_pid;
 	int irq;
-	const char *name;
+	__u32 name;
 };
+
+#define TP_DATA_LOC_READ_STR(dst, field, length)                               \
+	do {                                                                   \
+		unsigned short __offset = ctx->field & 0xFFFF;        \
+		bpf_probe_read_str((void *)dst, length, (char *)ctx + __offset);   \
+	} while (0)
 
 SEC("tracepoint/irq/irq_handler_entry")
 int irq_handler_entry_tp(struct irq_handler_entry_ctx *ctx)
@@ -670,9 +676,13 @@ int irq_handler_entry_tp(struct irq_handler_entry_ctx *ctx)
 				u64 ts = bpf_ktime_get_ns();
 				bpf_map_update_elem(&irq_start, &pid, &ts, BPF_ANY);
 			}
-			if (ftrace)
-				bpf_printk("domain_irq_entry irq=%d name=%s", ctx->irq, ctx->name);
 		}
+	}
+
+	if (ftrace) {
+		char irqname[32];
+		TP_DATA_LOC_READ_STR(irqname, name, sizeof(irqname));
+		bpf_printk("domain_irq_entry irq=%d name=%s\n", ctx->irq, irqname);
 	}
 
 	return 0;
