@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
-// Copyright (c) 2025, Realtek
-//
-// Based on stackcount(8) from BCC by Brendan Gregg.
+/* Copyright (c) 2025, Ism Hong
+ *
+ * Based on stackcount(8) from BCC by Brendan Gregg and others.
+ * 2025-10-13   Ism Hong   Created this.
+ *
+ * TODO:
+ * - Add regex support
+ */
 #include <argp.h>
 #include <errno.h>
 #include <signal.h>
@@ -62,6 +67,8 @@ static struct env {
 };
 
 static volatile bool exiting;
+static struct bpf_link **links = NULL;
+static int num_links = 0;
 
 const char *argp_program_version = "stackcount 0.1";
 const char *argp_program_bug_address =
@@ -94,7 +101,8 @@ static const struct argp_option opts[] = {
 	{ "interval", 'i', "SECONDS", 0, "Summary interval, seconds", 0 },
 	{ "duration", 'D', "SECONDS", 0, "Total duration of trace, seconds", 0 },
 	{ "timestamp", 'T', NULL, 0, "Include timestamp on output", 0 },
-	{ "regexp", 'r', NULL, 0, "Use regular expressions. Default is '*' wildcards only.", 0 },
+	{ "regexp", 'r', NULL, 0, "Use regular expressions. "
+		"Default is '*' wildcards only.", 0 },
 	{ "offset", 's', NULL, 0, "Show address offsets", 0 },
 	{ "perpid", 'P', NULL, 0, "Display stacks separately for each process", 0 },
 	{ "kernel-stacks-only", 'K', NULL, 0, "kernel stack only", 0 },
@@ -103,8 +111,11 @@ static const struct argp_option opts[] = {
 	{ "delimited", 'd', NULL, 0, "Insert delimiter between kernel/user stacks", 0 },
 	{ "folded", 'f', NULL, 0, "Output folded format", 0 },
 	{ "cgroup", 'C', "/sys/fs/cgroup/unified", 0, "Trace process in cgroup path", 0 },
-	{ "stack-storage-size", OPT_STACK_STORAGE_SIZE, "SIZE", 0, "The number of unique stack traces that can be stored and displayed (default 1024)", 0 },
-	{ "perf-max-stack-depth", OPT_PERF_MAX_STACK_DEPTH, "DEPTH", 0, "The limit for both kernel and user stack traces (default 127)", 0 },
+	{ "stack-storage-size", OPT_STACK_STORAGE_SIZE, "SIZE", 0,
+		"The number of unique stack traces that can be stored and displayed "
+		"(default 1024)", 0 },
+	{ "perf-max-stack-depth", OPT_PERF_MAX_STACK_DEPTH, "DEPTH", 0,
+		"The limit for both kernel and user stack traces (default 127)", 0 },
 	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
 	{},
 };
@@ -247,7 +258,8 @@ static void print_stacks(struct stackcount_bpf *skel, struct ksyms *ksyms, struc
 
 		if (items_size >= items_capacity) {
 			items_capacity = items_capacity == 0 ? 64 : items_capacity * 2;
-			struct count_info *new_items = realloc(items, items_capacity * sizeof(*items));
+			struct count_info *new_items =
+					realloc(items, items_capacity * sizeof(*items));
 			if (!new_items) {
 				warn("realloc failed\n");
 				goto cleanup;
@@ -283,7 +295,9 @@ static void print_stacks(struct stackcount_bpf *skel, struct ksyms *ksyms, struc
 
 			if (items[i].key.kernel_stack_id >= 0) {
 				if (bpf_map_lookup_elem(stack_traces_fd, &items[i].key.kernel_stack_id, stack) != 0) {
-					warn("failed to lookup kernel stack table, id = %d: %s\n", items[i].key.kernel_stack_id, strerror(errno));					continue;
+					warn("failed to lookup kernel stack table, id = %d: %s\n",
+							items[i].key.kernel_stack_id, strerror(errno));
+					continue;
 				}
 				for (int j = 0; j < env.perf_max_stack_depth && stack[j]; j++) {
 					const struct ksym *sym = ksyms__map_addr(ksyms, stack[j]);
@@ -300,10 +314,25 @@ static void print_stacks(struct stackcount_bpf *skel, struct ksyms *ksyms, struc
 				}
 				for (int j = 0; j < env.perf_max_stack_depth && stack[j]; j++) {
 					const struct ksym *sym = ksyms__map_addr(ksyms, stack[j]);
-					if (env.verbose)
-						printf("    %p %s\n", (void *)stack[j], sym ? sym->name : "[unknown]");
-					else
-						printf("    %s\n", sym ? sym->name : "[unknown]");
+
+					if (env.verbose) {
+						if (env.offset && sym)
+							printf("    %p %s+0x%llx\n",
+									(void *)stack[j], sym->name,
+									stack[j] - sym->addr);
+						else
+							printf("    %p %s\n",
+									(void *)stack[j],
+									sym ? sym->name : "[unknown]");
+					} else {
+						if (env.offset && sym)
+							printf("    %s+0x%llx\n",
+									sym->name,
+									stack[j] - sym->addr);
+						else
+							printf("    %s\n",
+									sym ? sym->name : "[unknown]");
+					}
 				}
 			}
 
@@ -340,9 +369,6 @@ cleanup:
 		lookup_key = &next_key;
 	}
 }
-
-static struct bpf_link **links = NULL;
-static int num_links = 0;
 
 static int attach_kprobes(struct stackcount_bpf *skel)
 {
@@ -424,7 +450,8 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	bpf_map__set_value_size(skel->maps.stack_traces, env.perf_max_stack_depth * sizeof(unsigned long));
+	bpf_map__set_value_size(skel->maps.stack_traces,
+						env.perf_max_stack_depth * sizeof(unsigned long));
 	bpf_map__set_max_entries(skel->maps.stack_traces, env.stack_storage_size);
 
 	skel->rodata->target_pid = env.pid;
@@ -477,7 +504,8 @@ int main(int argc, char **argv)
 	if (strcmp(probe_type, "t") == 0) {
 		char *category = strtok(NULL, ":");
 		char *event = strtok(NULL, ":");
-		struct bpf_link *link = bpf_program__attach_tracepoint(skel->progs.tp_prog, category, event);
+		struct bpf_link *link = bpf_program__attach_tracepoint(skel->progs.tp_prog,
+										category, event);
 		if (!link) {
 			err = -errno;
 			warn("failed to attach tracepoint: %d\n", err);
@@ -494,8 +522,11 @@ int main(int argc, char **argv)
 			err = -1;
 			goto cleanup;
 		}
-		struct bpf_uprobe_opts opts = { .sz = sizeof(opts), .func_name = probe, .retprobe = false };
-		struct bpf_link *link = bpf_program__attach_uprobe_opts(skel->progs.uprobe_prog, env.pid ?: -1, library, 0, &opts);
+		struct bpf_uprobe_opts opts = { .sz = sizeof(opts),
+										.func_name = probe,
+										.retprobe = false };
+		struct bpf_link *link = bpf_program__attach_uprobe_opts(
+			skel->progs.uprobe_prog, env.pid ?: -1, library, 0, &opts);
 		if (!link) {
 			err = -errno;
 			warn("failed to attach uprobe: %d\n", err);
