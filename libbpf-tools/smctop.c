@@ -248,15 +248,15 @@ int main(int argc, char **argv)
 	libbpf_set_print(libbpf_print_fn);
 
 	if (ftrace) {
-		FILE *f = fopen("/sys/kernel/debug/tracing/tracing_on", "r");
+		FILE *f = fopen("/sys/kernel/tracing/tracing_on", "r");
 		if (f) {
 			int val;
 			if (fscanf(f, "%d\n", &val) != 1 || val == 0) {
-				warn("Warning: ftrace is not enabled. Please run: echo 1 > /sys/kernel/debug/tracing/tracing_on\n");
+				warn("Warning: ftrace is not enabled. Please run: echo 1 > /sys/kernel/tracing/tracing_on\n");
 			}
 			fclose(f);
 		} else {
-			warn("Warning: can't open /sys/kernel/debug/tracing/tracing_on: %s\n", strerror(errno));
+			warn("Warning: can't open /sys/kernel/tracing/tracing_on: %s\n", strerror(errno));
 		}
 	}
 

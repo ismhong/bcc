@@ -183,14 +183,14 @@ static double val_convert(enum FMAT fmat, __u64 lat, __u64 err, __u64 cnt, bool 
 static void print_idle_table(enum FMAT fmat, int cpu_num, int state_num, struct idle_t percpustate[MAX_IDLE_STATE_NR][MAX_CPU_NR], double interval)
 {
 	const char *label;
-	switch (fmat) {
-	case LAT: label = "DURATION"; break;
-	case ERR: label = "ERROR"; break;
-	case CNT: label = "COUNT"; break;
-	case AVG: label = "AVERAGE"; break;
-	case PCT: label = "PERCENTAGE"; break;
-	default: return;
-	}
+    switch (fmat) {
+        case LAT: label = "DURATION"; break;
+        case ERR: label = "ERROR"; break;
+        case CNT: label = "COUNT"; break;
+        case AVG: label = "AVERAGE"; break;
+        case PCT: label = "PERCENTAGE"; break;
+        default: return;
+    }
 
 	printf("%15s", label);
 	for (int i = 0; i < cpu_num; i++)
