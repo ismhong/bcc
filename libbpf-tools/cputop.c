@@ -394,7 +394,7 @@ int main(int argc, char **argv)
 		sleep(env.interval);
 
 		printf("\n");
-		err = print_stats(obj, num_cpus);
+		err = print_stats(obj, (env.filter_cpu == -1)? num_cpus : 1);
 		if (err)
 			break;
 
