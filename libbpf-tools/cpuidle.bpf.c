@@ -44,11 +44,11 @@ struct {
 } last_event SEC(".maps");
 
 struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1);
-	__type(key, __u64);
-	__type(value, __u64);
-} sleep_cpus SEC(".maps");
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, MAX_CPU_NR);
+	__type(key, __u32);
+	__type(value, int);
+} cpu_state SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -71,25 +71,36 @@ struct {
 	__type(value, __u64);
 } latency_sum SEC(".maps");
 
+static __always_inline u64 calc_num_sleep_cpus(void)
+{
+	u64 num_sleep_cpus = 0;
+
+	for (int i = 0; i < MAX_CPU_NR; i++) {
+		if (i >= cpu_num)
+			break;
+
+		__u32 cpu_key = i;
+		int *cpu_idle_state = bpf_map_lookup_elem(&cpu_state, &cpu_key);
+
+		if (cpu_idle_state && *cpu_idle_state >= least_state)
+			num_sleep_cpus |= (1ULL << i);
+	}
+
+	return num_sleep_cpus;
+}
+
 static void update_overlap_table(u64 ts, int cpu, int state, int is_entry)
 {
 	u64 zero = 0;
 	u64 *last_event_ts, last_event_during;
-	u64 *num_sleep_cpus, *all_cpu_sleep_duration;
+	u64 *all_cpu_sleep_duration;
+	u64 num_sleep_cpus;
 
 	last_event_ts = bpf_map_lookup_elem(&last_event, &zero);
 	if (!last_event_ts) {
 		bpf_map_update_elem(&last_event, &zero, &ts, BPF_NOEXIST);
 		last_event_ts = bpf_map_lookup_elem(&last_event, &zero);
 		if (!last_event_ts)
-			return;
-	}
-
-	num_sleep_cpus = bpf_map_lookup_elem(&sleep_cpus, &zero);
-	if (!num_sleep_cpus) {
-		bpf_map_update_elem(&sleep_cpus, &zero, &zero, BPF_NOEXIST);
-		num_sleep_cpus = bpf_map_lookup_elem(&sleep_cpus, &zero);
-		if (!num_sleep_cpus)
 			return;
 	}
 
@@ -102,25 +113,31 @@ static void update_overlap_table(u64 ts, int cpu, int state, int is_entry)
 			return;
 	}
 
+	num_sleep_cpus = calc_num_sleep_cpus();
+	if (dump_overlap)
+		bpf_printk("%llx, %d", num_sleep_cpus, is_entry);
+
 	if (ts > *last_event_ts) {
 		last_event_during = ts - *last_event_ts;
 
-		if (*num_sleep_cpus == (1 << cpu_num) - 1 && !is_entry) {
+		if (num_sleep_cpus == (1ULL << cpu_num) - 1 && !is_entry) {
 			*all_cpu_sleep_duration += last_event_during;
 			if (dump_overlap)
-				bpf_printk("%x, %d, cur: %lld",
-						*num_sleep_cpus, is_entry,
+				bpf_printk("%llx, %d, cur: %lld",
+						num_sleep_cpus, is_entry,
 						last_event_during);
 		}
 		*last_event_ts = ts;
 	}
 
+	__u32 cpu_key = cpu;
+
 	if (is_entry) {
-		if (state >= least_state) {
-			*num_sleep_cpus |= (1 << cpu);
-		}
+		bpf_map_update_elem(&cpu_state, &cpu_key, &state, BPF_ANY);
 	} else {
-		*num_sleep_cpus &= ~(1 << cpu);
+		int new_state = 0;
+
+		bpf_map_update_elem(&cpu_state, &cpu_key, &new_state, BPF_ANY);
 	}
 }
 
