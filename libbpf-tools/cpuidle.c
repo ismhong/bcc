@@ -192,15 +192,13 @@ static void print_idle_table(enum FMAT fmat, int cpu_num, int state_num, struct 
         default: return;
     }
 
-	printf("%15s", label);
-	for (int i = 0; i < cpu_num; i++)
-		printf("%15s", "");
-	printf("%15s\n", "");
-
-	printf("%15s", "");
-	for (int i = 0; i < cpu_num; i++)
-		printf("CPU%-12d", i);
-	printf("TOTAL\n");
+    printf("%15s", label);
+    for (int i = 0; i < cpu_num; i++) {
+        char cpu_str[16];
+        snprintf(cpu_str, sizeof(cpu_str), "CPU%d", i);
+        printf("%15s", cpu_str);
+    }
+    printf("%15s\n", "TOTAL");
 
 	struct idle_t allcpu[MAX_IDLE_STATE_NR] = {};
 	struct idle_t percpu[MAX_CPU_NR] = {};
@@ -229,14 +227,16 @@ static void print_idle_table(enum FMAT fmat, int cpu_num, int state_num, struct 
 	}
 
 	for (int i = 0; i < state_num; i++) {
-		printf("STATE%-10d", i);
+		char state_str[16];
+		snprintf(state_str, sizeof(state_str), "STATE%d", i);
+		printf("%15s", state_str);
 		for (int j = 0; j < cpu_num; j++) {
 			printf("%15.2f", val_convert(fmat, percpustate[i][j].latency_sum, percpustate[i][j].error_times, percpustate[i][j].count, false, cpu_num, interval));
 		}
 		printf("%15.2f\n", val_convert(fmat, allcpu[i].latency_sum, allcpu[i].error_times, allcpu[i].count, true, cpu_num, interval));
 	}
 
-	printf("TOTAL%-10s", "");
+	printf("%15s", "TOTAL");
 	for (int i = 0; i < cpu_num; i++) {
 		printf("%15.2f", val_convert(fmat, percpu[i].latency_sum, percpu[i].error_times, percpu[i].count, false, cpu_num, interval));
 	}
@@ -345,7 +345,7 @@ int main(int argc, char **argv)
 		tm = localtime(&t);
 		strftime(ts, sizeof(ts), "%H:%M:%S", tm);
 		printf("\n%-8s\n", ts);
-		printf("*************************");
+		printf("*************************\n");
 
 		clock_gettime(CLOCK_MONOTONIC, &end_time);
 		interval_ns = (end_time.tv_sec - start_time.tv_sec) * 1e9 + (end_time.tv_nsec - start_time.tv_nsec);
