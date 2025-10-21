@@ -180,7 +180,10 @@ static double val_convert(enum FMAT fmat, __u64 lat, __u64 err, __u64 cnt, bool 
 	return val;
 }
 
-static void print_idle_table(enum FMAT fmat, int cpu_num, int state_num, struct idle_t percpustate[MAX_IDLE_STATE_NR][MAX_CPU_NR], double interval)
+static void print_idle_table(enum FMAT fmat, int cpu_num, int state_num,
+			   const char state_names[MAX_IDLE_STATE_NR][32],
+			   struct idle_t percpustate[MAX_IDLE_STATE_NR][MAX_CPU_NR],
+			   double interval)
 {
 	const char *label;
     switch (fmat) {
@@ -227,9 +230,7 @@ static void print_idle_table(enum FMAT fmat, int cpu_num, int state_num, struct 
 	}
 
 	for (int i = 0; i < state_num; i++) {
-		char state_str[16];
-		snprintf(state_str, sizeof(state_str), "STATE%d", i);
-		printf("%15s", state_str);
+		printf("%15s", state_names[i]);
 		for (int j = 0; j < cpu_num; j++) {
 			printf("%15.2f", val_convert(fmat, percpustate[i][j].latency_sum, percpustate[i][j].error_times, percpustate[i][j].count, false, cpu_num, interval));
 		}
@@ -285,6 +286,23 @@ int main(int argc, char **argv)
 	if (state_num > MAX_IDLE_STATE_NR) {
 		warn("Idle state count %d exceeds max %d\n", state_num, MAX_IDLE_STATE_NR);
 		return 1;
+	}
+
+	char state_names[MAX_IDLE_STATE_NR][32];
+	memset(state_names, 0, sizeof(state_names));
+
+	for (int i = 0; i < state_num; i++) {
+		char path[128];
+		snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu0/cpuidle/state%d/name", i);
+		FILE *f = fopen(path, "r");
+		if (f) {
+			if (fscanf(f, "%31s", state_names[i]) != 1) {
+				snprintf(state_names[i], 32, "STATE%d", i);
+			}
+			fclose(f);
+		} else {
+			snprintf(state_names[i], 32, "STATE%d", i);
+		}
 	}
 
 	skel = cpuidle_bpf__open();
@@ -367,11 +385,11 @@ int main(int argc, char **argv)
 		}
 
 		if (env.table) {
-			print_idle_table(LAT, cpu_num, state_num, percpustate, interval_ns);
-			print_idle_table(ERR, cpu_num, state_num, percpustate, interval_ns);
-			print_idle_table(CNT, cpu_num, state_num, percpustate, interval_ns);
-			print_idle_table(AVG, cpu_num, state_num, percpustate, interval_ns);
-			print_idle_table(PCT, cpu_num, state_num, percpustate, interval_ns);
+			print_idle_table(LAT, cpu_num, state_num, state_names, percpustate, interval_ns);
+			print_idle_table(ERR, cpu_num, state_num, state_names, percpustate, interval_ns);
+			print_idle_table(CNT, cpu_num, state_num, state_names, percpustate, interval_ns);
+			print_idle_table(AVG, cpu_num, state_num, state_names, percpustate, interval_ns);
+			print_idle_table(PCT, cpu_num, state_num, state_names, percpustate, interval_ns);
 
 			__u64 all_cpu_sleep_duration = 0;
 			__u32 key = 0;
