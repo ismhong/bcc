@@ -14,6 +14,162 @@
 #include "cpuidle.skel.h"
 #include "trace_helpers.h"
 #include "btf_helpers.h"
+#include <ctype.h>
+
+static char *lcs(const char *s1, const char *s2)
+{
+	if (!s1 || !s2)
+		return strdup("");
+	int s1_len = strlen(s1);
+	int s2_len = strlen(s2);
+	if (s1_len == 0 || s2_len == 0)
+		return strdup("");
+
+	int max_len = 0;
+	int end_pos_s1 = 0;
+	int *curr = (int *)calloc(s2_len + 1, sizeof(int));
+	int *prev = (int *)calloc(s2_len + 1, sizeof(int));
+
+	if (!curr || !prev) {
+		free(curr);
+		free(prev);
+		return strdup("");
+	}
+
+	for (int i = 0; i < s1_len; i++) {
+		for (int j = 0; j < s2_len; j++) {
+			if (s1[i] == s2[j]) {
+				curr[j + 1] = prev[j] + 1;
+				if (curr[j + 1] > max_len) {
+					max_len = curr[j + 1];
+					end_pos_s1 = i;
+				}
+			} else {
+				curr[j + 1] = 0;
+			}
+		}
+		int *temp = curr;
+		curr = prev;
+		prev = temp;
+	}
+
+	free(curr);
+	free(prev);
+
+	if (max_len == 0)
+		return strdup("");
+
+	char *result = (char *)malloc(max_len + 1);
+	if (!result)
+		return strdup("");
+
+	strncpy(result, s1 + end_pos_s1 - max_len + 1, max_len);
+	result[max_len] = '\0';
+	return result;
+}
+
+/*
+ * get_idle_state_names - Get idle state names.
+ *
+ * This function determines the names for CPU idle states to be used as labels
+ * in the output table. For each state index, it does the following:
+ * 1. Reads the idle state name from each CPU.
+ * 2. Finds the longest common substring among all CPU's names for that state.
+ *    This is to find a representative name, as names can differ across CPUs
+ *    (e.g., "WFI" vs "CPU-WFI").
+ * 3. Cleans up the resulting name by:
+ *    - Trimming leading/trailing non-alphabetic characters.
+ *    - Converting to uppercase.
+ * 4. Ensures name uniqueness by appending a numerical suffix ("-0", "-1", etc.)
+ *    if a name is duplicated.
+ *
+ * The final names are stored in the `state_names` array.
+ */
+static void get_idle_state_names(char state_names[MAX_IDLE_STATE_NR][32],
+				   int state_num, int cpu_num)
+{
+	memset(state_names, 0, sizeof(char) * MAX_IDLE_STATE_NR * 32);
+
+	for (int i = 0; i < state_num; i++) {
+		char path[128];
+		char *sub = NULL;
+
+		snprintf(path, sizeof(path),
+			 "/sys/devices/system/cpu/cpu0/cpuidle/state%d/name", i);
+		FILE *f = fopen(path, "r");
+
+		if (f) {
+			char name[128];
+
+			if (fscanf(f, "%127s", name) == 1)
+				sub = strdup(name);
+			fclose(f);
+		}
+
+		if (!sub) {
+			snprintf(state_names[i], 32, "STATE%d", i);
+			continue;
+		}
+
+		for (int j = 1; j < cpu_num; j++) {
+			snprintf(
+				path, sizeof(path),
+				"/sys/devices/system/cpu/cpu%d/cpuidle/state%d/name", j,
+				i);
+			f = fopen(path, "r");
+			if (f) {
+				char name_j[128];
+
+				if (fscanf(f, "%127s", name_j) == 1) {
+					char *new_sub = lcs(sub, name_j);
+
+					free(sub);
+					sub = new_sub;
+				}
+				fclose(f);
+			}
+		}
+
+		char *start = sub;
+
+		while (*start && !isalpha((unsigned char)*start))
+			start++;
+
+		if (strlen(start) > 0) {
+			char *end = start + strlen(start) - 1;
+
+			while (end > start && !isalpha((unsigned char)*end))
+				*end-- = '\0';
+		}
+
+		for (char *p = start; *p; p++)
+			*p = toupper((unsigned char)*p);
+
+		char temp_name[32];
+
+		snprintf(temp_name, sizeof(temp_name), "%s", start);
+
+		int repeat_idx = 0;
+		bool is_dup;
+
+		do {
+			is_dup = false;
+			for (int k = 0; k < i; k++) {
+				if (strcmp(state_names[k], temp_name) == 0) {
+					is_dup = true;
+					snprintf(temp_name, sizeof(temp_name),
+						 "%s-%d", start, repeat_idx++);
+					break;
+				}
+			}
+		} while (is_dup);
+		strncpy(state_names[i], temp_name, 32);
+		state_names[i][31] = '\0';
+
+		free(sub);
+	}
+}
+
 
 #define warn(...) fprintf(stderr, __VA_ARGS__)
 
@@ -195,7 +351,7 @@ static void print_idle_table(enum FMAT fmat, int cpu_num, int state_num,
         default: return;
     }
 
-    printf("%15s", label);
+    printf("%20s", label);
     for (int i = 0; i < cpu_num; i++) {
         char cpu_str[16];
         snprintf(cpu_str, sizeof(cpu_str), "CPU%d", i);
@@ -230,14 +386,14 @@ static void print_idle_table(enum FMAT fmat, int cpu_num, int state_num,
 	}
 
 	for (int i = 0; i < state_num; i++) {
-		printf("%15s", state_names[i]);
+		printf("%20s", state_names[i]);
 		for (int j = 0; j < cpu_num; j++) {
 			printf("%15.2f", val_convert(fmat, percpustate[i][j].latency_sum, percpustate[i][j].error_times, percpustate[i][j].count, false, cpu_num, interval));
 		}
 		printf("%15.2f\n", val_convert(fmat, allcpu[i].latency_sum, allcpu[i].error_times, allcpu[i].count, true, cpu_num, interval));
 	}
 
-	printf("%15s", "TOTAL");
+	printf("%20s", "TOTAL");
 	for (int i = 0; i < cpu_num; i++) {
 		printf("%15.2f", val_convert(fmat, percpu[i].latency_sum, percpu[i].error_times, percpu[i].count, false, cpu_num, interval));
 	}
@@ -289,21 +445,8 @@ int main(int argc, char **argv)
 	}
 
 	char state_names[MAX_IDLE_STATE_NR][32];
-	memset(state_names, 0, sizeof(state_names));
 
-	for (int i = 0; i < state_num; i++) {
-		char path[128];
-		snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu0/cpuidle/state%d/name", i);
-		FILE *f = fopen(path, "r");
-		if (f) {
-			if (fscanf(f, "%31s", state_names[i]) != 1) {
-				snprintf(state_names[i], 32, "STATE%d", i);
-			}
-			fclose(f);
-		} else {
-			snprintf(state_names[i], 32, "STATE%d", i);
-		}
-	}
+	get_idle_state_names(state_names, state_num, cpu_num);
 
 	skel = cpuidle_bpf__open();
 	if (!skel)
