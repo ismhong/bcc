@@ -134,36 +134,6 @@ static void sig_handler(int sig)
 	exiting = true;
 }
 
-static int read_line(const char *path, char *buf, int size)
-{
-	FILE *f;
-
-	f = fopen(path, "r");
-	if (!f)
-		return -1;
-
-	if (!fgets(buf, size, f)) {
-		fclose(f);
-		return -1;
-	}
-
-	buf[strcspn(buf, "\n")] = '\0';
-
-	fclose(f);
-
-	return 0;
-}
-
-static int get_comm(char *comm, int pid)
-{
-	char path[64];
-
-	sprintf(path, "/proc/%d/comm", pid);
-	if (read_line(path, comm, TASK_COMM_LEN) < 0)
-		strcpy(comm, "[unknown]");
-	return 0;
-}
-
 struct alloc_info {
 	__u32 pid;
 	__u32 tgid;
@@ -201,10 +171,14 @@ static int print_stat(struct pagealloctop_bpf *skel)
 		time_t t = time(NULL);
 		struct tm *tm = localtime(&t);
 		strftime(ts, sizeof(ts), "%H:%M:%S", tm);
-		printf("%-8s\n", ts);
+		printf("\n%-8s\n", ts);
 	} else {
 		printf("\n");
 	}
+
+	printf("%-6s %-6s %-16s %12s %12s %12s\n", "TGID", "PID",
+			"COMM", "MOVABLE_SZ", "UNMOVABLE_SZ",
+			env.megabyte ? "TOTAL_SZ(MB)" : "TOTAL_SZ(KB)");
 
 	while (bpf_map_get_next_key(fd, &lookup_pid, &next_pid) == 0) {
 		if (n >= MAX_ENTRIES) {
@@ -220,7 +194,7 @@ static int print_stat(struct pagealloctop_bpf *skel)
 		stats[n].tgid = stat_val.tgid;
 		stats[n].movable_size = stat_val.movable_size;
 		stats[n].unmovable_size = stat_val.unmovable_size;
-		get_comm(stats[n].comm, next_pid);
+		strcpy(stats[n].comm, stat_val.comm);
 		n++;
 		keys_to_delete[key_count++] = next_pid;
 		lookup_pid = next_pid;
@@ -291,10 +265,6 @@ int main(int argc, char **argv)
 
 	signal(SIGINT, sig_handler);
 	signal(SIGTERM, sig_handler);
-
-	printf("%-6s %-6s %-16s %12s %12s %12s\n", "TGID", "PID",
-			"COMM", "MOVABLE_SZ", "UNMOVABLE_SZ",
-			env.megabyte ? "TOTAL_SZ(MB)" : "TOTAL_SZ(KB)");
 
 	while (true) {
 		if (env.interval != 99999999)
