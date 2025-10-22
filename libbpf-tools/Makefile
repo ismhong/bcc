@@ -121,6 +121,7 @@ APPS = \
 	whoentersmc \
 	loadavg \
 	whoentercritical \
+	whoentercriticalstack \
 	$(BZ_APPS) \
 	#
 
