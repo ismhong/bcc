@@ -37,6 +37,7 @@ int pagealloc_alloc(struct trace_event_raw_mm_page_alloc *ctx)
 		stat->unmovable_size += (__PAGE_SIZE << ctx->order);
 
 	stat->tgid = tgid;
+	bpf_get_current_comm(&stat->comm, sizeof(stat->comm));
 
 	bpf_map_update_elem(&page_alloc_hash, &pid, stat, BPF_ANY);
 
