@@ -35,20 +35,20 @@ struct {
 SEC("tracepoint/sched/sched_process_fork")
 int tracepoint__sched_process_fork(struct trace_event_raw_sched_process_fork *args)
 {
-	struct task_struct *child = (struct task_struct *)bpf_get_current_task();
-	struct task_struct *parent = BPF_CORE_READ(child, real_parent);
+	struct task_struct *parent_task = (struct task_struct *)bpf_get_current_task();
+	struct task_struct *grandparent_task = BPF_CORE_READ(parent_task, real_parent);
 
-	pid_t ppid = BPF_CORE_READ(parent, tgid);
-	pid_t ptid = args->parent_pid;
-	pid_t cpid = BPF_CORE_READ(child, tgid);
-	pid_t ctid = args->child_pid;
+	pid_t parent_pid = BPF_CORE_READ(parent_task, tgid);
+	pid_t parent_tid = args->parent_pid;
+	pid_t grandparent_pid = BPF_CORE_READ(grandparent_task, tgid);
+	pid_t child_tid = args->child_pid;
 
-	if (targ_pid != INVALID_PID && ppid != targ_pid && cpid != targ_pid) {
+	if (targ_pid != INVALID_PID && parent_pid != targ_pid)
 		return 0;
-	}
-	if (targ_tid != INVALID_PID && ptid != targ_tid && ctid != targ_tid) {
+
+	if (targ_tid != INVALID_PID && parent_tid != targ_tid && child_tid != targ_tid)
 		return 0;
-	}
+
 	if (targ_event_type != -1 && targ_event_type != EVENT_FORK)
 		return 0;
 
@@ -56,13 +56,13 @@ int tracepoint__sched_process_fork(struct trace_event_raw_sched_process_fork *ar
 		struct event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
 		if (e) {
 			e->type = EVENT_FORK;
-			e->pid = ppid;
-			e->tid = ptid;
-			e->ppid = BPF_CORE_READ(parent, real_parent, tgid);
+			e->pid = parent_pid;
+			e->tid = parent_tid;
+			e->ppid = grandparent_pid;
 			bpf_probe_read_kernel_str(e->comm, sizeof(e->comm), args->parent_comm);
 
-			e->child_pid = cpid;
-			e->child_tid = ctid;
+			e->child_pid = parent_pid;
+			e->child_tid = child_tid;
 			bpf_probe_read_kernel_str(e->child_comm, sizeof(e->child_comm), args->child_comm);
 
 			bpf_ringbuf_submit(e, 0);
@@ -71,9 +71,9 @@ int tracepoint__sched_process_fork(struct trace_event_raw_sched_process_fork *ar
 
 	if (stat_mode) {
 		struct task_info info = {};
-		info.ppid = BPF_CORE_READ(parent, real_parent, tgid);
-		info.pid = ppid;
-		info.tid = ptid;
+		info.ppid = grandparent_pid;
+		info.pid = parent_pid;
+		info.tid = parent_tid;
 
 		struct event_count *count, zero = {};
 		count = bpf_map_lookup_elem(&counts, &info);
