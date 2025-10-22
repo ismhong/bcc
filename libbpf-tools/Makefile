@@ -124,6 +124,7 @@ APPS = \
 	vmallocleak \
 	whoentersmc \
 	loadavg \
+	whoentercritical \
 	$(BZ_APPS) \
 	#
 
