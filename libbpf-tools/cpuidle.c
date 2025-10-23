@@ -146,23 +146,21 @@ static void get_idle_state_names(char state_names[MAX_IDLE_STATE_NR][32],
 			*p = toupper((unsigned char)*p);
 
 		char temp_name[32];
-
-		snprintf(temp_name, sizeof(temp_name), "%s", start);
-
 		int repeat_idx = 0;
-		bool is_dup;
 
-		do {
-			is_dup = false;
+		for (;; repeat_idx++) {
+			snprintf(temp_name, sizeof(temp_name), "%s-%d", start,
+				 repeat_idx);
+			bool is_dup = false;
 			for (int k = 0; k < i; k++) {
 				if (strcmp(state_names[k], temp_name) == 0) {
 					is_dup = true;
-					snprintf(temp_name, sizeof(temp_name),
-						 "%s-%d", start, repeat_idx++);
 					break;
 				}
 			}
-		} while (is_dup);
+			if (!is_dup)
+				break;
+		}
 		strncpy(state_names[i], temp_name, 32);
 		state_names[i][31] = '\0';
 
@@ -535,7 +533,7 @@ int main(int argc, char **argv)
 			print_idle_table(PCT, cpu_num, state_num, state_names, percpustate, interval_ns);
 
 			__u64 all_cpu_sleep_duration = 0;
-			__u32 key = 0;
+			__u64 key = 0;
 			int all_cpu_sleep_fd = bpf_map__fd(skel->maps.all_cpu_sleep);
 			if (bpf_map_lookup_elem(all_cpu_sleep_fd, &key, &all_cpu_sleep_duration) == 0) {
 				__u64 val = all_cpu_sleep_duration - prev_all_cpu_sleep;
