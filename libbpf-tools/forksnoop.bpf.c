@@ -182,10 +182,7 @@ int __execve_entry(struct pt_regs *ctx, const char *filename, const char *const 
 		event->args_size = 0;
 
 		ret = bpf_probe_read_user_str(event->args, ARGSIZE, filename);
-		if (ret < 0) {
-			bpf_map_delete_elem(&execs, &tid);
-			return 0;
-		}
+
 		if (ret <= ARGSIZE) {
 			event->args_size += ret;
 		} else {
