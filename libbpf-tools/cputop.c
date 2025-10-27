@@ -390,10 +390,22 @@ int main(int argc, char **argv)
 
 	printf("Tracing on-CPU time... Hit Ctrl-C to end.\n");
 
+	time_t start_time;
+	time(&start_time);
+
 	while (1) {
 		sleep(env.interval);
 
 		printf("\n");
+
+		if (exiting && env.interval == 99999999) {
+			time_t end_time;
+			time(&end_time);
+			env.interval = end_time - start_time;
+			if (env.interval <= 0)
+				env.interval = 1;
+		}
+
 		err = print_stats(obj, (env.filter_cpu == -1)? num_cpus : 1);
 		if (err)
 			break;
