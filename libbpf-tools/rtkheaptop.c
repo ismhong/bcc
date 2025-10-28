@@ -161,6 +161,15 @@ static const struct argp argp = {
 	.args_doc = "[interval] [count]",
 };
 
+static const char *get_caller_str(const struct use_heap *key, char *buffer, size_t size)
+{
+	if (key->caller[0] != '\0')
+		return key->caller;
+
+	snprintf(buffer, size, "tgid-%d", key->tgid);
+	return buffer;
+}
+
 struct heap_summary_entry {
 	char name[HEAP_MAX_NAME];
 	unsigned long usage;
@@ -544,6 +553,8 @@ int main(int argc, char **argv)
 
 				if (map_entries) {
 					for (int i = 0; i < num_map_entries; i++) {
+						char caller_buf[TASK_COMM_LEN];
+
 						if (strcmp(map_entries[i].key.name, h_info->heap_name) != 0 ||
 							strcmp(map_entries[i].key.comm, t_entry->comm) != 0)
 							continue;
@@ -559,10 +570,13 @@ int main(int argc, char **argv)
 						}
 
 						total_alloc += map_entries[i].value.size;
+
 						printf("%-16s 0x%-10lx %12llu %15u %8u %5u\n",
-								map_entries[i].key.caller, map_entries[i].key.flags,
+								get_caller_str(&map_entries[i].key, caller_buf, sizeof(caller_buf)),
+								map_entries[i].key.flags,
 								map_entries[i].value.size, map_entries[i].value.max_alloc_latency,
 								map_entries[i].value.success, map_entries[i].value.fail);
+
 						map_entries[i].printed = true;
 					}
 				}
@@ -575,6 +589,8 @@ int main(int argc, char **argv)
 			if (map_entries) {
 				char last_task_name[TASK_COMM_LEN] = "";
 				for (int i = 0; i < num_map_entries; i++) {
+					char caller_buf[TASK_COMM_LEN];
+
 					if (map_entries[i].printed || strcmp(map_entries[i].key.name, h_info->heap_name) != 0)
 						continue;
 
@@ -603,8 +619,10 @@ int main(int argc, char **argv)
 					}
 
 					total_alloc += map_entries[i].value.size;
+
 					printf("%-16s 0x%-10lx %12llu %15u %8u %5u\n",
-							map_entries[i].key.caller, map_entries[i].key.flags,
+							get_caller_str(&map_entries[i].key, caller_buf, sizeof(caller_buf)),
+							map_entries[i].key.flags,
 							map_entries[i].value.size, map_entries[i].value.max_alloc_latency,
 							map_entries[i].value.success, map_entries[i].value.fail);
 					map_entries[i].printed = true;
