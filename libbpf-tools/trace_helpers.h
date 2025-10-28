@@ -17,6 +17,7 @@ static void __attribute__((constructor)) set_stdout_line_buffered(void)
 	setvbuf(stdout, NULL, _IOLBF, 0);
 }
 
+#ifndef NO_PLATFORM_CHECK
 static void __attribute__((constructor)) platform_check(void)
 {
 	const char *soc_files[] = {
@@ -45,6 +46,7 @@ static void __attribute__((constructor)) platform_check(void)
 	fprintf(stderr, "libbpf-tools only support Realtek devices\n");
 	exit(1);
 }
+#endif
 
 #ifndef __TRACE_HELPERS_H
 #define __TRACE_HELPERS_H
