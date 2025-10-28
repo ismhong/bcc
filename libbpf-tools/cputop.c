@@ -370,6 +370,11 @@ int main(int argc, char **argv)
 	obj->rodata->filter_tgid = env.filter_tgid;
 	obj->rodata->filter_policy = env.filter_policy;
 
+	if (!kprobe_exists("__schedule")) {
+		bpf_program__set_autoload(obj->progs.schedule_entry, false);
+		bpf_program__set_autoload(obj->progs.schedule_exit, false);
+	}
+
 	err = cputop_bpf__load(obj);
 	if (err) {
 		warn("failed to load BPF object: %d\n", err);
