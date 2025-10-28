@@ -12,9 +12,11 @@
 #define MAX_RT_PRIO 100
 #endif
 
-#define TASK_RUNNING 0
-#define TASK_STATE_MAX 1024
-#define PREEMPT_ON (TASK_RUNNING | TASK_STATE_MAX)
+#ifdef TASK_REPORT_MAX
+# define PREEMPT_ON    TASK_REPORT_MAX
+#else
+# define PREEMPT_ON    (TASK_RUNNING | TASK_STATE_MAX)
+#endif
 
 #define SM_PREEMPT		0x1
 
