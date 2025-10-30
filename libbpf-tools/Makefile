@@ -96,6 +96,7 @@ APPS = \
 	runqlen \
 	runqslower \
 	schedblockedtop \
+	smclatency \
 	smctop \
 	cputop \
 	sigsnoop \
