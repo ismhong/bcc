@@ -562,6 +562,10 @@ int main(int argc, char **argv)
 						if (env.caller_name[0] != '0' && strstr(map_entries[i].key.caller, env.caller_name) == NULL)
 							continue;
 
+						char flag_str[20];
+						snprintf(flag_str, sizeof(flag_str), "0x%lx", map_entries[i].key.flags);
+						const char *label = env.milliseconds ? "ms" : "us";
+
 						if (!task_alloc_printed) {
 							printf("%-16s %-12d ", t_entry->comm, t_entry->used_pages);
 							task_alloc_printed = true;
@@ -571,10 +575,11 @@ int main(int argc, char **argv)
 
 						total_alloc += map_entries[i].value.size;
 
-						printf("%-16s 0x%-10lx %12llu %15u %8u %5u\n",
+						printf("%-16s %-10s %12llu %12u %2s %8u %5u\n",
 								get_caller_str(&map_entries[i].key, caller_buf, sizeof(caller_buf)),
-								map_entries[i].key.flags,
+								flag_str,
 								map_entries[i].value.size, map_entries[i].value.max_alloc_latency,
+								label,
 								map_entries[i].value.success, map_entries[i].value.fail);
 
 						map_entries[i].printed = true;
@@ -620,10 +625,15 @@ int main(int argc, char **argv)
 
 					total_alloc += map_entries[i].value.size;
 
-					printf("%-16s 0x%-10lx %12llu %15u %8u %5u\n",
+					char flag_str[20];
+					snprintf(flag_str, sizeof(flag_str), "0x%lx", map_entries[i].key.flags);
+					const char *label = env.milliseconds ? "ms" : "us";
+
+					printf("%-16s %-10s %12llu %12u %2s %8u %5u\n",
 							get_caller_str(&map_entries[i].key, caller_buf, sizeof(caller_buf)),
-							map_entries[i].key.flags,
+							flag_str,
 							map_entries[i].value.size, map_entries[i].value.max_alloc_latency,
+							label,
 							map_entries[i].value.success, map_entries[i].value.fail);
 					map_entries[i].printed = true;
 				}

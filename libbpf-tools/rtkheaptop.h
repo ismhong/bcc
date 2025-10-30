@@ -20,10 +20,10 @@ struct use_heap {
 };
 
 struct heap_info {
+	__u64 size;
+	__u32 max_alloc_latency;
 	__u32 success;
 	__u32 fail;
-	__u32 max_alloc_latency;
-	__u64 size;
 };
 
 struct alloc_info {
