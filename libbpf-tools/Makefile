@@ -58,6 +58,7 @@ APPS = \
 	cpudist \
 	cpufreq \
 	drsnoop \
+	argdist \
 	execsnoop \
 	exitsnoop \
 	filelife \
