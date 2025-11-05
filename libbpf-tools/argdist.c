@@ -34,6 +34,7 @@ static struct env {
 	int count;
 	bool verbose;
 	bool cumulative;
+	bool hex;
 	char *info_func_name;
 	char **histspecs;
 	int hist_count;
@@ -100,6 +101,7 @@ static const struct argp_option opts[] = {
 	{ "cumulative", 'c', NULL, 0, "Do not clear maps at each interval", 0 },
 	{ "histogram", 'H', "SPEC", 0, "Histogram probe specifier", 0 },
 	{ "count", 'C', "SPEC", 0, "Frequency count probe specifier", 0 },
+	{ "hex", 'x', NULL, 0, "Show event data in hexadecimal", 0 },
 	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
 	{},
 };
@@ -127,6 +129,9 @@ static error_t parse_arg(int key, char *arg, struct argp_state *state)
 		break;
 	case 'c':
 		env.cumulative = true;
+		break;
+	case 'x':
+		env.hex = true;
 		break;
 	case 'H':
 		env.histspecs = realloc(env.histspecs, (env.hist_count + 1) * sizeof(*env.histspecs));
@@ -488,7 +493,12 @@ static void print_maps(struct argdist_bpf *skel)
 				if (p->config.exprs[0].source == ARG_PID)
 					event_prefix = "$PID =";
 
-				if ((long long)counts[j].value < 0) {
+				if (env.hex) {
+					printf("\t%-10llu %s %#llx\n",
+							(unsigned long long)counts[j].count,
+							event_prefix,
+							(unsigned long long)counts[j].value);
+				} else if ((long long)counts[j].value < 0) {
 					printf("\t%-10llu %s %lld (%llu)\n",
 							(unsigned long long)counts[j].count,
 							event_prefix,
