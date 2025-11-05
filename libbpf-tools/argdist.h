@@ -19,6 +19,7 @@ enum arg_source {
 	ARG_RET,
 	ARG_PID,
 	ARG_LATENCY,
+	ARG_CONST_1,
 };
 
 enum predicate_op {
