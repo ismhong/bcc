@@ -22,6 +22,7 @@ struct probe_bpf_info {
 	char *spec;
 	bool is_hist;
 	char *func_name;
+	char *expr_str;
 	__u64 func_ip;
 	struct probe_config config;
 	struct bpf_link *link;
@@ -347,6 +348,7 @@ static int setup_probe(const char *spec, bool is_hist)
 		goto fail;
 	}
 
+	probe->expr_str = strdup(expr_str);
 	probe->config.id = env.probe_count;
 	probe->config.is_hist = is_hist;
 	probe->config.is_kretprobe = (probe_type == 'r');
@@ -489,23 +491,21 @@ static void print_maps(struct argdist_bpf *skel)
 
 			printf("\t%-10s %s\n", "COUNT", "EVENT");
 			for (size_t j = 0; j < counts_len; j++) {
-				const char *event_prefix = "$retval =";
-				if (p->config.exprs[0].source == ARG_PID)
-					event_prefix = "$PID =";
+				const char *event_prefix = p->expr_str;
 
 				if (env.hex) {
-					printf("\t%-10llu %s %#llx\n",
+					printf("\t%-10llu %s = %#llx\n",
 							(unsigned long long)counts[j].count,
 							event_prefix,
 							(unsigned long long)counts[j].value);
 				} else if ((long long)counts[j].value < 0) {
-					printf("\t%-10llu %s %lld (%llu)\n",
+					printf("\t%-10llu %s = %lld (%llu)\n",
 							(unsigned long long)counts[j].count,
 							event_prefix,
 							(long long)counts[j].value,
 							(unsigned long long)counts[j].value);
 				} else {
-					printf("\t%-10llu %s %llu\n",
+					printf("\t%-10llu %s = %llu\n",
 							(unsigned long long)counts[j].count,
 							event_prefix,
 							(unsigned long long)counts[j].value);
