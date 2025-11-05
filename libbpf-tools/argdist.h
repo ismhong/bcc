@@ -50,12 +50,12 @@ struct probe_config {
 };
 
 struct hist_key {
-	__u32 probe_id;
-	__u32 slot;
+	__u64 probe_id;
+	__u64 slot;
 };
 
 struct freq_key {
-	__u32 probe_id;
+	__u64 probe_id;
 	__u64 value;
 };
 
