@@ -93,6 +93,10 @@ int dummy_kprobe(struct pt_regs *ctx)
 		u64 *val = bpf_map_lookup_elem(&hist_map, &key);
 		if (val)
 			__sync_fetch_and_add(val, 1);
+		else {
+			u64 one = 1;
+			bpf_map_update_elem(&hist_map, &key, &one, BPF_NOEXIST);
+		}
 	} else {
 		struct freq_key key = { .probe_id = config->id, .value = value };
 		u64 *val = bpf_map_lookup_elem(&freq_map, &key);
@@ -150,6 +154,10 @@ int dummy_kretprobe(struct pt_regs *ctx)
 		u64 *val = bpf_map_lookup_elem(&hist_map, &key);
 		if (val)
 			__sync_fetch_and_add(val, 1);
+		else {
+			u64 one = 1;
+			bpf_map_update_elem(&hist_map, &key, &one, BPF_NOEXIST);
+		}
 	} else {
 		struct freq_key key = { .probe_id = config->id, .value = value };
 		u64 *val = bpf_map_lookup_elem(&freq_map, &key);
