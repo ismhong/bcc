@@ -77,6 +77,7 @@ int dummy_kprobe(struct pt_regs *ctx)
 	struct expr *expr = &config->exprs[0];
 	__u64 value = 0;
 	if (expr->source == ARG_PID) value = bpf_get_current_pid_tgid() >> 32;
+	else if (expr->source == ARG_CONST_1) value = 1;
 	else if (expr->source == ARG1) value = ctx->regs[0];
 	else if (expr->source == ARG2) value = ctx->regs[1];
 	else if (expr->source == ARG3) value = ctx->regs[2];

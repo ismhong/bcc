@@ -339,8 +339,16 @@ static int setup_probe(const char *spec, bool is_hist)
 		expr_str = part4;
 		filter_str = NULL;
 	} else {
-		err("Expression not specified\n");
-		goto fail;
+		if (is_hist) {
+			if (probe_type == 'r') {
+				expr_str = "$retval";
+			} else {
+				err("Expression not specified for histogram\n");
+				goto fail;
+			}
+		} else {
+			expr_str = "1";
+		}
 	}
 
 	if (!expr_str) {
@@ -364,6 +372,8 @@ static int setup_probe(const char *spec, bool is_hist)
 			goto fail;
 		}
 		expr->source = ARG_RET;
+	} else if (strcmp(expr_str, "1") == 0) {
+		expr->source = ARG_CONST_1;
 	} else {
 		const struct btf_param *params = (const struct btf_param *)(func_proto + 1);
 		int arg_idx = -1;
@@ -491,9 +501,20 @@ static void print_maps(struct argdist_bpf *skel)
 
 			printf("\t%-10s %s\n", "COUNT", "EVENT");
 			for (size_t j = 0; j < counts_len; j++) {
-				const char *event_prefix = p->expr_str;
+				const char *event_prefix;
+				bool is_total_calls = false;
+				if (strcmp(p->expr_str, "1") == 0) {
+					event_prefix = "total calls";
+					is_total_calls = true;
+				} else {
+					event_prefix = p->expr_str;
+				}
 
-				if (env.hex) {
+				if (is_total_calls) {
+					printf("\t%-10llu %s\n",
+							(unsigned long long)counts[j].count,
+							event_prefix);
+				} else if (env.hex) {
 					printf("\t%-10llu %s = %#llx\n",
 							(unsigned long long)counts[j].count,
 							event_prefix,
