@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
 /* Copyright (c) 2025 Realtek, Inc. */
-#include <argp.h>
+#include "argparse.h"
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -36,10 +36,12 @@ static struct prog_env {
 	.count = 99999999,
 };
 
+static bool milliseconds = false;
+
 const char *argp_program_version = "mmclatency 0.1";
 const char *argp_program_bug_address =
 	"https://github.com/iovisor/bcc/tree/master/libbpf-tools";
-static const char args_doc[] = "[interval] [count]";
+
 static const char program_doc[] =
 "Summarize mmc device I/O latency as a histogram\n"
 "\n"
@@ -58,102 +60,24 @@ static const char program_doc[] =
 "    ./mmclatency -z 64 -Z 512 # Trace mmc request 64~512 blocks only\n"
 ;
 
-static const struct argp_option opts[] = {
-	{ "timestamp", 'T', NULL, 0, "include timestamp on output", 0 },
-	{ "milliseconds", 'm', NULL, 0, "millisecond histogram", 0 },
-	{ "avglatency", 'a', NULL, 0, "print average latency", 0 },
-	{ "Commands", 'C', NULL, 0, "print a histogram per mmc command", 0 },
-	{ "Blocks", 'B', NULL, 0, "print a histogram per blocks of MMC I/O", 0 },
-	{ "command", 'c', "COMMAND", 0, "trace specific mmc command only", 0 },
-	{ "min_blocks", 'z', "MIN_BLOCKS", 0, "trace larger than this mmc blocks", 0 },
-	{ "max_blocks", 'Z', "MAX_BLOCKS", 0, "trace smaller than this mmc blocks", 0 },
-	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
-	{},
+static const char * const usages[] = {
+	"mmclatency [-h] [-T] [-m] [-a] [-C] [-B] [-c COMMAND] [-z MIN_BLOCKS] [-Z MAX_BLOCKS] [interval] [count]",
+	NULL,
 };
 
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	struct prog_env *env = state->input;
-	long val;
-
-	switch (key) {
-	case 'T':
-		env->timestamp = true;
-		break;
-	case 'm':
-		env->units = MSEC;
-		break;
-	case 'a':
-		env->avglatency = true;
-		break;
-	case 'C':
-		env->per_command = true;
-		break;
-	case 'B':
-		env->per_blocks = true;
-		break;
-	case 'c':
-		errno = 0;
-		val = strtol(arg, NULL, 10);
-		if (errno || val < 0) {
-			warn("Invalid command: %s\n", arg);
-			argp_usage(state);
-		}
-		env->command = val;
-		break;
-	case 'z':
-		val = strtol(arg, NULL, 10);
-		if (errno || val < 0) {
-			warn("Invalid min_blocks: %s\n", arg);
-			argp_usage(state);
-		}
-		env->min_blocks = val;
-		break;
-	case 'Z':
-		val = strtol(arg, NULL, 10);
-		if (errno || val < 0) {
-			warn("Invalid max_blocks: %s\n", arg);
-			argp_usage(state);
-		}
-		env->max_blocks = val;
-		break;
-	case 'v':
-		env->verbose = true;
-		break;
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case ARGP_KEY_ARG:
-		if (state->arg_num == 0) {
-			val = strtol(arg, NULL, 10);
-			if (errno || val <= 0) {
-				warn("Invalid interval: %s\n", arg);
-				argp_usage(state);
-			}
-			env->interval = val;
-		} else if (state->arg_num == 1) {
-			val = strtol(arg, NULL, 10);
-			if (errno || val <= 0) {
-				warn("Invalid count: %s\n", arg);
-				argp_usage(state);
-			}
-			env->count = val;
-		} else {
-			argp_usage(state);
-		}
-		break;
-	case ARGP_KEY_END:
-		if (env->min_blocks && env->max_blocks && env->min_blocks > env->max_blocks) {
-			warn("min_blocks (-z) can't be greater than max_blocks (-Z)\n");
-			argp_usage(state);
-		}
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
+static struct argparse_option options[] = {
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "include timestamp on output", NULL, 0, 0),
+	OPT_BOOLEAN('m', "milliseconds", &milliseconds, "millisecond histogram", NULL, 0, 0),
+	OPT_BOOLEAN('a', "avglatency", &env.avglatency, "print average latency", NULL, 0, 0),
+	OPT_BOOLEAN('C', "Commands", &env.per_command, "print a histogram per mmc command", NULL, 0, 0),
+	OPT_BOOLEAN('B', "Blocks", &env.per_blocks, "print a histogram per blocks of MMC I/O", NULL, 0, 0),
+	OPT_INTEGER('c', "command", &env.command, "trace specific mmc command only", NULL, 0, 0),
+	OPT_INTEGER('z', "min_blocks", &env.min_blocks, "trace larger than this mmc blocks", NULL, 0, 0),
+	OPT_INTEGER('Z', "max_blocks", &env.max_blocks, "trace smaller than this mmc blocks", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_HELP(),
+	OPT_END(),
+};
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -417,21 +341,62 @@ static void clear_maps(struct mmclatency_bpf *obj)
 int main(int argc, char **argv)
 {
 	LIBBPF_OPTS(bpf_object_open_opts, open_opts);
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.args_doc = args_doc,
-		.doc = program_doc,
-	};
 	struct mmclatency_bpf *obj;
+	struct argparse argparse;
 	int err;
 	char ts[32];
 	struct tm *tm;
 	time_t t;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, &env);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, program_doc, NULL);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (milliseconds)
+		env.units = MSEC;
+
+	if (env.command < 0) {
+		warn("Invalid command: %d\n", env.command);
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (env.min_blocks < 0) {
+		warn("Invalid min_blocks: %d\n", env.min_blocks);
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (env.max_blocks < 0) {
+		warn("Invalid max_blocks: %d\n", env.max_blocks);
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (env.min_blocks && env.max_blocks && env.min_blocks > env.max_blocks) {
+		warn("min_blocks (-z) can't be greater than max_blocks (-Z)\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
+
+	if (argc > 0) {
+		env.interval = atoi(argv[0]);
+		if (env.interval <= 0) {
+			warn("Invalid interval\n");
+			argparse_usage(&argparse);
+			return 1;
+		}
+	}
+	if (argc > 1) {
+		env.count = atoi(argv[1]);
+		if (env.count <= 0) {
+			warn("Invalid count\n");
+			argparse_usage(&argparse);
+			return 1;
+		}
+	}
+	if (argc > 2) {
+		warn("unrecognized positional arguments\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
 
 	sigaction(SIGINT, &(struct sigaction){.sa_handler = sig_hand}, NULL);
 	sigaction(SIGTERM, &(struct sigaction){.sa_handler = sig_hand}, NULL);

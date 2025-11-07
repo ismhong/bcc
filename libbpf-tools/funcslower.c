@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause) */
 
-#include <argp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,6 +14,7 @@
 #include "trace_helpers.h"
 #include "btf_helpers.h"
 #include "uprobe_helpers.h"
+#include "argparse.h"
 
 #define PERF_BUFFER_PAGES	64
 #define PERF_POLL_TIMEOUT_MS	100
@@ -38,13 +38,13 @@ static int functions_count = 0;
 static struct syms_cache *syms_cache = NULL;
 static struct ksyms *ksyms = NULL;
 
-const char *argp_program_version = "funcslower 0.1";
-const char *argp_program_bug_address = "https://github.com/iovisor/bcc/tree/master/libbpf-tools";
-const char argp_program_doc[] =
+static const char *const usages[] = {
+	"funcslower [-h] [-p PID] [-m MIN_MS] [-u MIN_US] [-a ARGUMENTS] [-T] [-t] [-v] [-f] [-U] [-K] function [function ...]",
+	NULL,
+};
+
+const char doc[] =
 "Trace slow kernel or user function calls.\n"
-"\n"
-"USAGE: funcslower [-h] [-p PID] [-m MIN_MS] [-u MIN_US] [-a ARGUMENTS]\n"
-"                  [-T] [-t] [-v] [-f] [-U] [-K] function [function ...]\n"
 "\n"
 "EXAMPLES:\n"
 "  ./funcslower vfs_write              # trace vfs_write calls slower than 1ms\n"
@@ -56,77 +56,20 @@ const char argp_program_doc[] =
 "  ./funcslower -UK -m 10 c:open       # Show user and kernel stack frame of open calls slower than 10ms\n"
 "  ./funcslower -f -UK c:open          # Output in folded format for flame graphs\n";
 
-static const struct argp_option opts[] = {
-	{ "pid", 'p', "PID", 0, "Trace this PID only", 0 },
-	{ "min-ms", 'm', "MIN_MS", 0, "Minimum duration to trace (ms)", 0 },
-	{ "min-us", 'u', "MIN_US", 0, "Minimum duration to trace (us)", 0 },
-	{ "arguments", 'a', "ARGUMENTS", 0, "Print this many entry arguments, as hex", 0 },
-	{ "time", 'T', NULL, 0, "Show HH:MM:SS timestamp", 0 },
-	{ "timestamp", 't', NULL, 0, "Show timestamp in seconds at us resolution", 0 },
-	{ "verbose", 'v', NULL, 0, "Print BPF program debug output", 0 },
-	{ "folded", 'f', NULL, 0, "Output folded format, one line per stack (for flame graphs)", 0 },
-	{ "user-stack", 'U', NULL, 0, "Output user stack trace", 0 },
-	{ "kernel-stack", 'K', NULL, 0, "Output kernel stack trace", 0 },
-	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
-	{},
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_INTEGER('p', "pid", &target_pid, "Trace this PID only", NULL, 0, 0),
+	OPT_FLOAT('m', "min-ms", &min_ms, "Minimum duration to trace (ms)", NULL, 0, 0),
+	OPT_FLOAT('u', "min-us", &min_us, "Minimum duration to trace (us)", NULL, 0, 0),
+	OPT_INTEGER('a', "arguments", &args_count, "Print this many entry arguments, as hex", NULL, 0, 0),
+	OPT_BOOLEAN('T', "time", &timestamp, "Show HH:MM:SS timestamp", NULL, 0, 0),
+	OPT_BOOLEAN('t', "timestamp", &time_sec, "Show timestamp in seconds at us resolution", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &verbose, "Print BPF program debug output", NULL, 0, 0),
+	OPT_BOOLEAN('f', "folded", &folded, "Output folded format, one line per stack (for flame graphs)", NULL, 0, 0),
+	OPT_BOOLEAN('U', "user-stack", &user_stack, "Output user stack trace", NULL, 0, 0),
+	OPT_BOOLEAN('K', "kernel-stack", &kernel_stack, "Output kernel stack trace", NULL, 0, 0),
+	OPT_END(),
 };
-
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	switch (key) {
-	case 'p':
-		target_pid = strtol(arg, NULL, 10);
-		break;
-	case 'm':
-		min_ms = strtof(arg, NULL);
-		break;
-	case 'u':
-		min_us = strtof(arg, NULL);
-		break;
-	case 'a':
-		args_count = strtol(arg, NULL, 10);
-		if (args_count > MAX_ARGS) {
-			fprintf(stderr, "Max arguments supported is %d\n", MAX_ARGS);
-			return ARGP_ERR_UNKNOWN;
-		}
-		break;
-	case 'T':
-		timestamp = true;
-		break;
-	case 't':
-		time_sec = true;
-		break;
-	case 'v':
-		verbose = true;
-		break;
-	case 'f':
-		folded = true;
-		break;
-	case 'U':
-		user_stack = true;
-		break;
-	case 'K':
-		kernel_stack = true;
-		break;
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case ARGP_KEY_ARG:
-		if (functions_count == 0)
-			functions = &state->argv[state->next - 1];
-		functions_count++;
-		break;
-	case ARGP_KEY_END:
-		if (functions_count == 0) {
-			fprintf(stderr, "No function to trace, provide at least one.\n");
-			argp_usage(state);
-		}
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -268,21 +211,25 @@ struct bpf_link *bpf_program__attach_kretprobe(const struct bpf_program *prog, c
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_program_doc,
-	};
+	struct argparse argparse;
 	struct funcslower_bpf *skel = NULL;
 	struct perf_buffer *pb = NULL;
 	struct bpf_link *links[MAX_FUNCS * 2];
 	int links_cnt = 0;
 	int err, i;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return 1;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, "Trace slow kernel or user function calls.", doc);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
 
+	if (argc > 0) {
+		functions = (char **)argparse.out;
+		functions_count = argc;
+	} else {
+		fprintf(stderr, "No function to trace, provide at least one.\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
 	if (functions_count == 0) {
 		fprintf(stderr, "No function to trace, provide at least one.\n");
 		return 1;

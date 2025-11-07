@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
-
-#include <argp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +12,7 @@
 
 #include "cmatop.h"
 #include "cmatop.skel.h"
+#include "argparse.h"
 
 struct cma_alloc_info {
 	__u64 pages;
@@ -33,44 +32,22 @@ static struct env {
 
 static volatile bool exiting;
 
-const char *argp_program_version = "cmatop 0.1";
-const char *argp_program_bug_address = "<https://github.com/iovisor/bcc/tree/master/libbpf-tools>";
-const char argp_doc[] = "Analyse CMA allocation as a table.\nUSAGE: cmatop [-T] [interval] [count] [--range]\n";
-
-static const struct argp_option opts[] = {
-	{ "timestamp", 'T', 0, 0, "Include timestamp on output", 0 },
-	{ "range", 'r', 0, 0, "Show specific PFN range", 0 },
-	{ "verbose", 'v', 0, 0, "Verbose debug output", 0 },
-	{ 0, 0, 0, 0, 0, 0 },
+static const char *const usages[] = {
+	"cmatop [-h] [-T] [-r] [-v] [interval] [count]",
+	NULL,
 };
 
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	switch (key) {
-	case 'T':
-		env.timestamp = true;
-		break;
-	case 'r':
-		env.range = true;
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case ARGP_KEY_ARG:
-		if (state->arg_num == 0)
-			env.interval = atoi(arg);
-		else if (state->arg_num == 1)
-			env.count = atoi(arg);
-		else
-			argp_usage(state);
-		break;
-	case ARGP_KEY_END:
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
+const char doc[] =
+"Analyse CMA allocation as a table.\n"
+"USAGE: cmatop [-T] [interval] [count] [--range]\n";
+
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "Include timestamp on output", NULL, 0, 0),
+	OPT_BOOLEAN('r', "range", &env.range, "Show specific PFN range", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_END(),
+};
 
 static int compare_cma_alloc(const void *a, const void *b)
 {
@@ -99,19 +76,24 @@ static void sig_handler(int sig)
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_doc,
-	};
+	struct argparse argparse;
 	struct cmatop_bpf *skel;
 	int err;
 	time_t start_time;
 
-	err = argp_parse(&argp, argc, argv, 0, 0, 0);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, "Analyse CMA allocation as a table.", doc);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
 
+	if (argc > 0)
+		env.interval = atoi(argparse.out[0]);
+	if (argc > 1)
+		env.count = atoi(argparse.out[1]);
+	if (argc > 2) {
+		fprintf(stderr, "Unrecognized positional argument: %s\n", argparse.out[2]);
+		argparse_usage(&argparse);
+		return 1;
+	}
 	libbpf_set_print(libbpf_print_fn);
 
 	skel = cmatop_bpf__open();

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
-#include <argp.h>
+#include "argparse.h"
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -55,23 +55,8 @@ const char argp_program_doc[] =
 "    cputop              # summarize on-CPU time as a ranking table.\n"
 "    cputop 1 10         # print 1 second summaries, 10 times\n"
 "    cputop 1 -c 1       # trace cpu1 only\n"
-"    cputop 1 -p fifo    # trace sched_fifo task only\n"
+"    cputop -p fifo    # trace sched_fifo task only\n"
 "    cputop -m -r 10     # milliseconds, and 10 max rows\n";
-
-static const struct argp_option opts[] = {
-	{ "timestamp", 'T', NULL, 0, "Include timestamp on output", 0 },
-	{ "milliseconds", 'm', NULL, 0, "Millisecond histogram", 0 },
-	{ "maxrows", 'r', "MAXROWS", 0, "Maximum rows to print, default 20", 0 },
-	{ "name", 'n', NULL, 0, "Use name as key to summarize", 0 },
-	{ "cpu", 'c', "CPU", 0, "Trace with this cpu only", 0 },
-	{ "tgid", 't', "TGID", 0, "Trace with this tgid only", 0 },
-	{ "sched_policy", 'p', "POLICY", 0, "Trace with this sched policy only, default all", 0 },
-	{ "percpu", 'C', NULL, 0, "Show each cpu id separately", 0 },
-	{ "extend", 'E', NULL, 0, "Extend to show context (in)voluntary switches and preempt counts", 0 },
-	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
-	{},
-};
 
 static int parse_policy(const char *str) {
 	if (!strcmp(str, "normal")) return 0;
@@ -83,89 +68,37 @@ static int parse_policy(const char *str) {
 	return -1;
 }
 
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
+static int parse_policy_callback(struct argparse *self, const struct argparse_option *option)
 {
-	static int pos_args;
-
-	switch (key) {
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case 'T':
-		env.timestamp = true;
-		break;
-	case 'm':
-		env.milliseconds = true;
-		break;
-	case 'r':
-		errno = 0;
-		env.max_rows = strtol(arg, NULL, 10);
-		if (errno || env.max_rows <= 0) {
-			warn("invalid max_rows: %s\n", arg);
-			argp_usage(state);
-		}
-		break;
-	case 'n':
-		env.summarize_by_name = true;
-		break;
-	case 'c':
-		errno = 0;
-		env.filter_cpu = strtol(arg, NULL, 10);
-		if (errno || env.filter_cpu < 0) {
-			warn("invalid cpu: %s\n", arg);
-			argp_usage(state);
-		}
-		break;
-	case 't':
-		errno = 0;
-		env.filter_tgid = strtol(arg, NULL, 10);
-		if (errno || env.filter_tgid <= 0) {
-			warn("invalid tgid: %s\n", arg);
-			argp_usage(state);
-		}
-		break;
-	case 'p':
-		env.filter_policy_str = arg;
-		env.filter_policy = parse_policy(arg);
-		if (env.filter_policy < 0) {
-			warn("invalid policy: %s\n", arg);
-			argp_usage(state);
-		}
-		break;
-	case 'C':
-		env.per_cpu = true;
-		break;
-	case 'E':
-		env.extended_stats = true;
-		break;
-	case ARGP_KEY_ARG:
-		errno = 0;
-		if (pos_args == 0) {
-			env.interval = strtol(arg, NULL, 10);
-			if (errno || env.interval <= 0) {
-				warn("invalid interval\n");
-				argp_usage(state);
-			}
-		} else if (pos_args == 1) {
-			env.count = strtol(arg, NULL, 10);
-			if (errno || env.count <= 0) {
-				warn("invalid count\n");
-				argp_usage(state);
-			}
-		} else {
-			warn("unrecognized positional argument: %s\n", arg);
-			argp_usage(state);
-		}
-		pos_args++;
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
+	env.filter_policy_str = (char *)self->optvalue;
+	env.filter_policy = parse_policy(self->optvalue);
+	if (env.filter_policy < 0) {
+		fprintf(stderr, "invalid policy: %s\n", self->optvalue);
+		argparse_usage(self);
+		exit(EXIT_FAILURE);
 	}
 	return 0;
 }
+
+static const char * const usages[] = {
+	"cputop [options] [interval] [count]",
+	NULL,
+};
+
+static struct argparse_option options[] = {
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "Include timestamp on output", NULL, 0, 0),
+	OPT_BOOLEAN('m', "milliseconds", &env.milliseconds, "Millisecond histogram", NULL, 0, 0),
+	OPT_INTEGER('r', "maxrows", &env.max_rows, "Maximum rows to print, default 20", NULL, 0, 0),
+	OPT_BOOLEAN('n', "name", &env.summarize_by_name, "Use name as key to summarize", NULL, 0, 0),
+	OPT_INTEGER('c', "cpu", &env.filter_cpu, "Trace with this cpu only", NULL, 0, 0),
+	OPT_INTEGER('t', "tgid", &env.filter_tgid, "Trace with this tgid only", NULL, 0, 0),
+	OPT_STRING('p', "sched_policy", NULL, "Trace with this sched policy only, default all", parse_policy_callback, 0, 0),
+	OPT_BOOLEAN('C', "percpu", &env.per_cpu, "Show each cpu id separately", NULL, 0, 0),
+	OPT_BOOLEAN('E', "extend", &env.extended_stats, "Extend to show context (in)voluntary switches and preempt counts", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_HELP(),
+	OPT_END(),
+};
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -333,18 +266,52 @@ static int print_stats(struct cputop_bpf *obj, int num_cpus)
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_program_doc,
-	};
 	struct cputop_bpf *obj;
 	int err;
 	int num_cpus;
+	struct argparse argparse;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, argp_program_doc, NULL);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (env.max_rows <= 0) {
+		warn("invalid max_rows: %d\n", env.max_rows);
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (env.filter_cpu < -1) {
+		warn("invalid cpu: %d\n", env.filter_cpu);
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (env.filter_tgid <= 0 && env.filter_tgid != -1) {
+		warn("invalid tgid: %d\n", env.filter_tgid);
+		argparse_usage(&argparse);
+		return 1;
+	}
+
+	if (argc > 0) {
+		env.interval = strtol(argv[0], NULL, 10);
+		if (env.interval <= 0) {
+			warn("invalid interval\n");
+			argparse_usage(&argparse);
+			return 1;
+		}
+	}
+	if (argc > 1) {
+		env.count = strtol(argv[1], NULL, 10);
+		if (env.count <= 0) {
+			warn("invalid count\n");
+			argparse_usage(&argparse);
+			return 1;
+		}
+	}
+	if (argc > 2) {
+		warn("unrecognized positional argument\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
 
 	libbpf_set_print(libbpf_print_fn);
 

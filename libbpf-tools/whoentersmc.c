@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause) */
-#include <argp.h>
+#include "argparse.h"
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,43 +26,20 @@ static volatile bool exiting;
 
 const char *argp_program_version = "whoentersmc 0.1";
 const char *argp_program_bug_address = "<https://github.com/iovisor/bcc/tree/master/libbpf-tools>";
-static const struct argp_option opts[] = {
-	{ "timestamp", 'T', NULL, 0, "Include timestamp on output", 0 },
-	{ "interval", 'i', "INTERVAL", 0, "Output interval, in seconds", 0 },
-	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, 0, "Show this help message and exit", 0 },
-	{},
+const char argp_doc[] = "Analysis which CPU entered secure world.\n\nUSAGE: whoentersmc [-T]\n";
+
+static const char * const usages[] = {
+	"whoentersmc [-T] [-i INTERVAL] [-v]",
+	NULL,
 };
 
-const char argp_doc[] = "Analysis which CPU entered secure world.\n\nUSAGE: whoentersmc [-T]\n";
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	long interval;
-
-	switch (key) {
-	case 'T':
-		env.timestamp = true;
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case 'i':
-		errno = 0;
-		interval = strtol(arg, NULL, 10);
-		if (errno || interval <= 0) {
-			fprintf(stderr, "Invalid interval: %s\n", arg);
-			argp_usage(state);
-		}
-		env.interval = interval;
-		break;
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
+static struct argparse_option options[] = {
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "Include timestamp on output", NULL, 0, 0),
+	OPT_INTEGER('i', "interval", &env.interval, "Output interval, in seconds", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_HELP(),
+	OPT_END(),
+};
 
 static int libbpf_print_fn(enum libbpf_print_level level,
 		const char *format, va_list args)
@@ -79,19 +56,26 @@ static void sig_handler(int sig)
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_doc,
-	};
 	struct whoentersmc_bpf *obj;
 	bool optee_tp = false;
 	bool optee_kprobe = false;
 	int err, i, cpu_count;
+	struct argparse argparse;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, argp_doc, NULL);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (env.interval <= 0) {
+		fprintf(stderr, "Invalid interval: %d\n", env.interval);
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (argc > 0) {
+		fprintf(stderr, "unrecognized positional arguments\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
 
 	libbpf_set_print(libbpf_print_fn);
 

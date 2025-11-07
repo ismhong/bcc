@@ -8,7 +8,6 @@
  * Licensed under the Apache License, Version 2.0 (the "License")
  *
  */
-#include <argp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,19 +20,20 @@
 #include "loadavg.h"
 #include "loadavg.skel.h"
 #include "trace_helpers.h"
+#include "argparse.h"
 
 #define __unused __attribute__((__unused__))
 #define MAX_ENTRIES 10240
 
 static struct env {
-	bool timestamp;
+	int timestamp;
 	int maxrows;
-	bool extend;
-	char *sort_by;
-	char *policy;
+	int extend;
+	const char *sort_by;
+	const char *policy;
 	int interval;
 	int count;
-	bool verbose;
+	int verbose;
 } env = {
 	.maxrows = 30,
 	.sort_by = "SUM_LOAD",
@@ -45,74 +45,20 @@ static struct env {
 static volatile bool exiting;
 static int cpu_count;
 
-const char *argp_program_version = "loadavg 0.1";
-const char *argp_program_bug_address = "< rocky.hong@realtek.com >";
-const char argp_doc[] =
-"Summarize /proc/loadavg contribution.\n"
-"\n"
-"USAGE: loadavg [-h] [-T] [-r MAXROWS] [-e] [-s SORT] [-p POLICY] [interval] [count]\n";
-
-static const struct argp_option opts[] = {
-	{ "timestamp", 'T', 0, 0, "Include timestamp on output", 0 },
-	{ "maxrows", 'r', "MAXROWS", 0, "Maximum rows to print, default 30", 0 },
-	{ "extend", 'e', 0, 0, "Extend runqueue info", 0 },
-	{ "sort", 's', "SORT", 0, "Sort by specific field, default SUM_LOAD", 0 },
-	{ "policy", 'p', "POLICY", 0, "Trace with this sched policy only, default all", 0 },
-	{ "verbose", 'v', 0, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
-	{0},
+static const char *const usages[] = {
+	"loadavg [-h] [-T] [-r MAXROWS] [-e] [-s SORT] [-p POLICY] [interval] [count]",
+	NULL,
 };
 
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	static int pos_args;
-
-	switch (key) {
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case 'T':
-		env.timestamp = true;
-		break;
-	case 'r':
-		env.maxrows = atoi(arg);
-		break;
-	case 'e':
-		env.extend = true;
-		break;
-	case 's':
-		env.sort_by = arg;
-		break;
-	case 'p':
-		env.policy = arg;
-		break;
-	case ARGP_KEY_ARG:
-		if (pos_args == 0) {
-			env.interval = atoi(arg);
-		} else if (pos_args == 1) {
-			env.count = atoi(arg);
-		} else {
-			argp_usage(state);
-		}
-		pos_args++;
-		break;
-	case ARGP_KEY_END:
-		if (env.count == 0)
-			env.count = -1;
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
-
-static const struct argp argp = {
-	.options = opts,
-	.parser = parse_arg,
-	.doc = argp_doc,
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "Include timestamp on output", NULL, 0, 0),
+	OPT_INTEGER('r', "maxrows", &env.maxrows, "Maximum rows to print, default 30", NULL, 0, 0),
+	OPT_BOOLEAN('e', "extend", &env.extend, "Extend runqueue info", NULL, 0, 0),
+	OPT_STRING('s', "sort", &env.sort_by, "Sort by specific field, default SUM_LOAD", NULL, 0, 0),
+	OPT_STRING('p', "policy", &env.policy, "Trace with this sched policy only, default all", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_END(),
 };
 
 struct load_info_t {
@@ -356,11 +302,20 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va
 int main(int argc, char **argv)
 {
 	struct loadavg_bpf *skel;
+	struct argparse argparse;
 	int err;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, "\nSummarize /proc/loadavg contribution.", "\n");
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (argc > 0)
+		env.interval = atoi(argv[0]);
+	if (argc > 1)
+		env.count = atoi(argv[1]);
+
+	if (env.count == 0)
+		env.count = -1;
 
 	libbpf_set_print(libbpf_print_fn);
 

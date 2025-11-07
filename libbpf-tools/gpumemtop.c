@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
-#include <argp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +12,7 @@
 #include "gpumemtop.h"
 #include "gpumemtop.skel.h"
 #include "trace_helpers.h"
+#include "argparse.h"
 
 #define MAX_ENTRIES 10240
 
@@ -30,9 +30,12 @@ static struct env {
 	.verbose = false,
 };
 
-const char *argp_program_version = "gpumemtop 0.1";
-const char *argp_program_bug_address = "iovisor/bcc <project@iovisor.org>";
-const char argp_program_doc[] =
+static const char *const usages[] = {
+	"gpumemtop [-h] [-T] [-j] [-v] [interval] [count]",
+	NULL,
+};
+
+const char doc[] =
 "Analysis GPU memory usage as a table.\n"
 "\n"
 "EXAMPLES:\n"
@@ -42,65 +45,12 @@ const char argp_program_doc[] =
 "    ./gpumemtop -T 5        # ls summaries and timestamps\n"
 "    ./gpumemtop -j 5        # Show to csv format log\n";
 
-static const struct argp_option opts[] = {
-	{ "timestamp", 'T', NULL, 0, "Include timestamp on output", 0 },
-	{ "csv", 'j', NULL, 0, "Just print fields: comma-separated values", 0 },
-	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, ARGP_KEY_FINI, "Show this help message and exit", 0 },
-	{},
-};
-
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	static int pos_args;
-
-	switch (key) {
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case 'T':
-		env.timestamp = true;
-		break;
-	case 'j':
-		env.csv = true;
-		break;
-	case ARGP_KEY_ARG:
-		errno = 0;
-		if (pos_args == 0) {
-			env.interval = strtol(arg, NULL, 10);
-			if (errno || env.interval <= 0) {
-				fprintf(stderr, "Invalid interval\n");
-				argp_usage(state);
-			}
-		} else if (pos_args == 1) {
-			env.count = strtol(arg, NULL, 10);
-			if (errno || env.count <= 0) {
-				fprintf(stderr, "Invalid count\n");
-				argp_usage(state);
-			}
-		} else {
-			fprintf(stderr, "Unrecognized positional argument: %s\n", arg);
-			argp_usage(state);
-		}
-		pos_args++;
-		break;
-	case ARGP_KEY_END:
-		if (env.interval == 99999999)
-			env.interval = 1;
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
-
-static const struct argp argp = {
-	.options = opts,
-	.parser = parse_arg,
-	.doc = argp_program_doc,
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "Include timestamp on output", NULL, 0, 0),
+	OPT_BOOLEAN('j', "csv", &env.csv, "Just print fields: comma-separated values", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_END(),
 };
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
@@ -243,13 +193,40 @@ static int print_stat(struct gpumemtop_bpf *skel)
 int main(int argc, char **argv)
 {
 	struct gpumemtop_bpf *skel;
+	struct argparse argparse;
 	int err;
 	time_t start_time;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, "Analysis GPU memory usage as a table.", doc);
+	int non_opts = argparse_parse(&argparse, argc, (const char **)argv);
 
+	if (non_opts > 0) {
+		errno = 0;
+		env.interval = strtol(argparse.out[0], NULL, 10);
+		if (errno || env.interval <= 0) {
+			fprintf(stderr, "Invalid interval\n");
+			argparse_usage(&argparse);
+			return 1;
+		}
+	}
+	if (non_opts > 1) {
+		errno = 0;
+		env.count = strtol(argparse.out[1], NULL, 10);
+		if (errno || env.count <= 0) {
+			fprintf(stderr, "Invalid count\n");
+			argparse_usage(&argparse);
+			return 1;
+		}
+	}
+	if (non_opts > 2) {
+		fprintf(stderr, "Unrecognized positional argument: %s\n", argparse.out[2]);
+		argparse_usage(&argparse);
+		return 1;
+	}
+
+	if (env.interval == 99999999)
+		env.interval = 1;
 	libbpf_set_print(libbpf_print_fn);
 
 	if (!tracepoint_exists("gpu_mem", "gpu_mem_total")) {

@@ -18,7 +18,6 @@
  * 11-Jun-2025   msinwu      Created this.
  */
 
-#include <argp.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -35,6 +34,7 @@
 #include "linuxfiletop.h"
 #include "linuxfiletop.skel.h"
 #include "btf_helpers.h"
+#include "argparse.h"
 
 #define DEVNAMELEN 256
 
@@ -72,79 +72,39 @@ static struct env
 
 static volatile bool exiting;
 
-const char *argp_program_version = "linuxfiletop 0.1";
-const char *argp_program_bug_address = "<https://github.com/iovisor/bcc/tree/master/tools>";
-const char argp_doc[] = "Linux file reads and writes by process.\n\nUSAGE: linuxfiletop [-h] [-a] [-C] [-r MAXROWS] [-s {all,reads,writes,rbytes,wbytes}] [-p PID] [-t TID] [-o {all,read,write}] [-f FS_TYPE] [-d DEV_NAME] [-m MOUNT_POINT] [interval] [count]\n\nEXAMPLES:\n    ./linuxfiletop               # linux file I/O top, 1 second refresh\n    ./linuxfiletop -C            # don't clear the screen\n    ./linuxfiletop -t 181        # TID 181 only\n    ./linuxfiletop -f proc       # trace proc fs only\n    ./linuxfiletop -d dm-49      # trace dm-49 devname only\n    ./linuxfiletop -m /data      # trace /data mount point only\n    ./linuxfiletop 5             # 5 second summaries\n    ./linuxfiletop 5 10          # 5 second summaries, 10 times only\n";
-
-static const struct argp_option opts[] = {
-	{ .name = "all_files", .key = 'a', .doc = "include non-regular file types (sockets, FIFOs, etc)" },
-	{ .name = "noclear", .key = 'C', .doc = "don't clear the screen" },
-	{ .name = "maxrows", .key = 'r', .arg = "MAXROWS", .doc = "maximum rows to print, default 20" },
-	{ .name = "sort", .key = 's', .arg = "SORT", .doc = "sort column, default all" },
-	{ .name = "pid", .key = 'p', .arg = "PID", .doc = "trace this PID only" },
-	{ .name = "tid", .key = 't', .arg = "TID", .doc = "trace this TID only" },
-	{ .name = "rw_only", .key = 'o', .arg = "RW_ONLY", .doc = "trace only reads or writes" },
-	{ .name = "fs_type", .key = 'f', .arg = "FS_TYPE", .doc = "trace this filesystem type only" },
-	{ .name = "dev_name", .key = 'd', .arg = "DEV_NAME", .doc = "trace this device name only" },
-	{ .name = "mount_point", .key = 'm', .arg = "MOUNT_POINT", .doc = "trace this mount point only" },
-	{ .name = "verbose", .key = 'v', .doc = "Verbose debug output" },
-	{ .name = NULL, .key = 'h', .flags = OPTION_HIDDEN, .doc = "Show the full help" },
-	{},
+static const char *const usages[] = {
+	"linuxfiletop [-h] [-a] [-C] [-r MAXROWS] [-s {all,reads,writes,rbytes,wbytes}] [-p PID] [-t TID] [-o {all,read,write}] [-f FS_TYPE] [-d DEV_NAME] [-m MOUNT_POINT] [interval] [count]",
+	NULL,
 };
 
-static int parse_arg(int key, char *arg, struct argp_state *state)
-{
-	switch (key)
-	{
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case 'a':
-		env.all_files = true;
-		break;
-	case 'C':
-		env.noclear = true;
-		break;
-	case 'r':
-		env.maxrows = atoi(arg);
-		break;
-	case 's':
-		env.sort = arg;
-		break;
-	case 'p':
-		env.pid = atoi(arg);
-		break;
-	case 't':
-		env.tid = atoi(arg);
-		break;
-	case 'o':
-		env.rw_only = arg;
-		break;
-	case 'f':
-		env.fs_type = arg;
-		break;
-	case 'd':
-		env.dev_name = arg;
-		break;
-	case 'm':
-		env.mount_point = arg;
-		break;
-	case ARGP_KEY_ARG:
-		if (state->arg_num == 0)
-			env.interval = atoi(arg);
-		else if (state->arg_num == 1)
-			env.count = atoi(arg);
-		else
-			argp_usage(state);
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
+const char doc[] =
+"Linux file reads and writes by process.\n"
+"\n"
+"EXAMPLES:\n"
+"./linuxfiletop               # linux file I/O top, 1 second refresh\n"
+"./linuxfiletop -C            # don't clear the screen\n"
+"./linuxfiletop -t 181        # TID 181 only\n"
+"./linuxfiletop -f proc       # trace proc fs only\n"
+"./linuxfiletop -d dm-49      # trace dm-49 devname only\n"
+"./linuxfiletop -m /data      # trace /data mount point only\n"
+"./linuxfiletop 5             # 5 second summaries\n"
+"./linuxfiletop 5 10          # 5 second summaries, 10 times only\n";
+
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_BOOLEAN('a', "all_files", &env.all_files, "include non-regular file types (sockets, FIFOs, etc)", NULL, 0, 0),
+	OPT_BOOLEAN('C', "noclear", &env.noclear, "don't clear the screen", NULL, 0, 0),
+	OPT_INTEGER('r', "maxrows", &env.maxrows, "maximum rows to print, default 20", NULL, 0, 0),
+	OPT_STRING('s', "sort", &env.sort, "sort column, default all", NULL, 0, 0),
+	OPT_INTEGER('p', "pid", &env.pid, "trace this PID only", NULL, 0, 0),
+	OPT_INTEGER('t', "tid", &env.tid, "trace this TID only", NULL, 0, 0),
+	OPT_STRING('o', "rw_only", &env.rw_only, "trace only reads or writes", NULL, 0, 0),
+	OPT_STRING('f', "fs_type", &env.fs_type, "trace this filesystem type only", NULL, 0, 0),
+	OPT_STRING('d', "dev_name", &env.dev_name, "trace this device name only", NULL, 0, 0),
+	OPT_STRING('m', "mount_point", &env.mount_point, "trace this mount point only", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_END(),
+};
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
 			 va_list args)
@@ -179,7 +139,7 @@ static void parse_mountinfo()
 	{
 		mounts = realloc(mounts, (mounts_count + 1) * sizeof(struct mount_info));
 		sscanf(line, "%*d %*d %s %*s %s %*s", mounts[mounts_count].dev,
-		       mounts[mounts_count].mount_point);
+				mounts[mounts_count].mount_point);
 		mounts_count++;
 	}
 	fclose(f);
@@ -399,22 +359,26 @@ static int print_stat(struct linuxfiletop_bpf *obj)
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp =
-	    {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_doc,
-	    };
+	struct argparse argparse;
 	int err;
 	struct linuxfiletop_bpf *obj;
 
 	signal(SIGINT, sig_handler);
 	signal(SIGTERM, sig_handler);
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, "Linux file reads and writes by process.", doc);
+	int non_opts = argparse_parse(&argparse, argc, (const char **)argv);
 
+	if (non_opts > 0)
+		env.interval = atoi(argparse.out[0]);
+	if (non_opts > 1)
+		env.count = atoi(argparse.out[1]);
+	if (non_opts > 2) {
+		fprintf(stderr, "Unrecognized positional argument: %s\n", argparse.out[2]);
+		argparse_usage(&argparse);
+		return 1;
+	}
 	libbpf_set_print(libbpf_print_fn);
 
 	obj = linuxfiletop_bpf__open();

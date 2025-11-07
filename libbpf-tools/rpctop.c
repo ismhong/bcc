@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
 /* Copyright (c) 2021 Realtek, Inc. */
-#include <argp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +13,7 @@
 #include "rpctop.h"
 #include "rpctop.skel.h"
 #include "trace_helpers.h"
+#include "argparse.h"
 
 #define __unused __attribute__((unused))
 
@@ -37,9 +37,12 @@ static struct env {
 	.verbose = false,
 };
 
-const char *argp_program_version = "rpctop 0.1";
-const char *argp_program_bug_address = "Edward Wu <edward_wu@realtek.com>";
-const char argp_program_doc[] =
+static const char *const usages[] = {
+	"rpctop [-h] [-C] [-f] [-u LATENCY] [-P ID] [interval] [count]",
+	NULL,
+};
+
+static const char doc[] =
 "Trace Realtek remote procedure call.\n"
 "\n"
 "EXAMPLES:\n"
@@ -51,72 +54,15 @@ const char argp_program_doc[] =
 "    ./rpctop -u 1000    # filter by latency > 1000 us\n"
 "    ./rpctop -P 201     # trace only AUDIO_SYSTEM\n";
 
-static const struct argp_option opts[] = {
-	{ "programID", 'P', "ID", 0, "Trace only this program ID", 0 },
-	{ "fulldisplay", 'f', NULL, 0, "Also display versionID, parameterSize, mycontext", 0 },
-	{ "filter_us_latency", 'u', "LATENCY", 0, "Filter by latency (us)", 0 },
-	{ "timestamp", 'T', NULL, 0, "Include timestamp on output", 0 },
-	{ "noclear", 'C', NULL, 0, "Don't clear the screen", 0 },
-	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, ARGP_KEY_FINI, "Show this help message and exit", 0 },
-	{},
-};
-
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	static int pos_args;
-
-	switch (key) {
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case 'P':
-		env.programID = atoi(arg);
-		break;
-	case 'f':
-		env.fulldisplay = true;
-		break;
-	case 'u':
-		env.filter_us_latency = atoi(arg);
-		break;
-	case 'T':
-		env.timestamp = true;
-		break;
-	case 'C':
-		env.noclear = true;
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case ARGP_KEY_ARG:
-		if (pos_args == 0) {
-			env.interval = atoi(arg);
-			if (env.interval <= 0) {
-				fprintf(stderr, "Invalid interval: %s\n", arg);
-				argp_usage(state);
-			}
-		} else if (pos_args == 1) {
-			env.count = atoi(arg);
-			if (env.count <= 0) {
-				fprintf(stderr, "Invalid count: %s\n", arg);
-				argp_usage(state);
-			}
-		} else {
-			fprintf(stderr, "Unrecognized positional argument: %s\n", arg);
-			argp_usage(state);
-		}
-		pos_args++;
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
-
-static const struct argp argp = {
-	.options = opts,
-	.parser = parse_arg,
-	.doc = argp_program_doc,
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_INTEGER('P', "programID", &env.programID, "Trace only this program ID", NULL, 0, 0),
+	OPT_BOOLEAN('f', "fulldisplay", &env.fulldisplay, "Also display versionID, parameterSize, mycontext", NULL, 0, 0),
+	OPT_INTEGER('u', "filter_us_latency", &env.filter_us_latency, "Filter by latency (us)", NULL, 0, 0),
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "Include timestamp on output", NULL, 0, 0),
+	OPT_BOOLEAN('C', "noclear", &env.noclear, "Don't clear the screen", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_END(),
 };
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
@@ -438,16 +384,33 @@ static void sig_handler(int sig)
 int main(int argc, char **argv)
 {
 	struct rpctop_bpf *skel;
+	struct argparse argparse;
 	int err;
 	bool use_rpc_mode = false;
 	static struct event events[10240];
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, doc, "\n");
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (argc > 0) {
+		env.interval = atoi(argv[0]);
+		if (env.interval <= 0) {
+			fprintf(stderr, "Invalid interval: %s\n", argv[0]);
+			argparse_usage(&argparse);
+			return 1;
+		}
+	}
+	if (argc > 1) {
+		env.count = atoi(argv[1]);
+		if (env.count <= 0) {
+			fprintf(stderr, "Invalid count: %s\n", argv[1]);
+			argparse_usage(&argparse);
+			return 1;
+		}
+	}
 
 	libbpf_set_print(libbpf_print_fn);
-
 	if (tracepoint_exists("rtk_rpc", "rtk_rpc_peek_rpc_request") &&
 			tracepoint_exists("rtk_rpc", "rtk_rpc_peek_rpc_reply")) {
 		use_rpc_mode = true;

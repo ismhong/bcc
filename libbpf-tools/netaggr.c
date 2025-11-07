@@ -31,7 +31,6 @@
  */
 // Based on netaggr from BCC by Edward Wu.
 // 14-Aprial-2023   Mickey Zhu   Created this
-#include <argp.h>
 #include <signal.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -43,6 +42,7 @@
 #include "netaggr.skel.h"
 #include "btf_helpers.h"
 #include "trace_helpers.h"
+#include "argparse.h"
 
 #define warn(...) fprintf(stderr, __VA_ARGS__)
 
@@ -59,10 +59,14 @@ static struct prog_env {
 };
 
 static volatile bool exiting;
-const char argp_args_doc[] =
+
+static const char *const usages[] = {
+	"netaggr [-h] [-i INTERVAL] [-d DURATION] [-e] [-T] [-v]",
+	NULL,
+};
+
+const char doc[] =
 "Analyze GRO/GSO aggregation and print as a histogram.\n"
-"\n"
-"USAGE: netaggr [-h] [-i INTERVAL] [-d DURATION] [-e] [-T] [-v]\n"
 "\n"
 "EXAMPLES:\n"
 "    netaggr            # summarize aggregation\n"
@@ -71,65 +75,15 @@ const char argp_args_doc[] =
 "    netaggr -i 2 -T    # print every 2 seconds, with timestamps\n"
 ;
 
-static const struct argp_option opts[] = {
-	// name/longopt:str, key/shortopt:int, arg:str, flags:int, doc:str
-	{ "interval", 'i', "INTERVAL", 0, "Summary interval in seconds", 0},
-	{ "duration", 'd', "DURATION", 0, "Duration to trace", 0},
-	{ "extension", 'e', NULL, 0, " Summarize average/total value", 0},
-	{ "timestamp", 'T', NULL, 0, "Print timestamp", 0},
-	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0},
-	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0},
-	{},
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_INTEGER('i', "interval", &env.interval, "Summary interval in seconds", NULL, 0, 0),
+	OPT_INTEGER('d', "duration", &env.duration, "Duration to trace", NULL, 0, 0),
+	OPT_BOOLEAN('e', "extension", &env.extension, " Summarize average/total value", NULL, 0, 0),
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "Print timestamp", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_END(),
 };
-
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	struct prog_env *env = state->input;
-	long duration, interval;
-
-	switch (key) {
-	case 'i':
-		errno = 0;
-		interval = strtol(arg, NULL, 10);
-		if (errno || interval <= 0) {
-			warn("Invalid interval: %s\n", arg);
-			argp_usage(state);
-		}
-		env->interval = interval;
-		break;
-	case 'd':
-		errno = 0;
-		duration = strtol(arg, NULL, 10);
-		if (errno || duration <= 0) {
-			warn("Invalid duration: %s\n", arg);
-			argp_usage(state);
-		}
-		env->duration = duration;
-		break;
-	case 'e':
-		env->extension = true;
-		break;
-	case 'T':
-		env->timestamp = true;
-		break;
-	case 'v':
-		env->verbose = true;
-		break;
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case ARGP_KEY_END:
-		if (env->duration) {
-			if (env->interval > env->duration)
-				env->interval = env->duration;
-			env->iterations = env->duration / env->interval;
-		}
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -165,7 +119,7 @@ static int print_map(struct bpf_map *map, bool receive)
 		}
 		printf("\ndev->name = %s\n", next_key.name);
 		print_linear_hist(info.slots, MAX_SLOTS, 0, 1, receive ?
-				  "gro_segs": "gso_segs");
+				"gro_segs": "gso_segs");
 		lookup_key = next_key;
 	}
 
@@ -200,21 +154,22 @@ static int print_map(struct bpf_map *map, bool receive)
 int main(int argc, char **argv)
 {
 	LIBBPF_OPTS(bpf_object_open_opts, open_opts);
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_args_doc,
-	};
+	struct argparse argparse;
 	struct netaggr_bpf *obj;
 	struct tm *tm;
 	char ts[32];
 	time_t t;
 	int i, err;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, &env);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, "Analyze GRO/GSO aggregation and print as a histogram.", doc);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
 
+	if (env.duration) {
+		if (env.interval > env.duration)
+			env.interval = env.duration;
+		env.iterations = env.duration / env.interval;
+	}
 	libbpf_set_print(libbpf_print_fn);
 
 	err = ensure_core_btf(&open_opts);
