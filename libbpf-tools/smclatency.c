@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
 /* Copyright (c) 2025 Realtek, Inc. */
-#include <argp.h>
+#include "argparse.h"
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -47,78 +47,24 @@ const char argp_program_doc[] =
 "    smclatency 5 -I              # smc latency includes ISR interrupt time\n"
 "    smclatency 5 -f              # ftrace debug\n";
 
-static const struct argp_option opts[] = {
-	{ "core", 'c', "CORE", 0, "filter specific CPU core", 0 },
-	{ "interval", 'i', "INTERVAL", 0, "summary interval, in seconds", 0 },
-	{ "duration", 'd', "DURATION", 0, "total duration of trace, in seconds", 0 },
-	{ "ftrace", 'f', NULL, 0, "ftrace debug", 0 },
-	{ "isr_time", 'I', NULL, 0, "smc latency includes ISR interrupt time", 0 },
-	{ "timestamp", 'T', NULL, 0, "include timestamp on output", 0 },
-	{ "microseconds", 'u', NULL, 0, "microsecond histogram", 0 },
-	{ "milliseconds", 'm', NULL, 0, "millisecond histogram", 0 },
-	{ "verbose", 'v', NULL, 0, "print the BPF program (for debugging purposes)", 0 },
-	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
-	{},
+static const char * const usages[] = {
+	"smclatency [-h] [-c CORE] [-i INTERVAL] [-d DURATION] [-f] [-I] [-T] [-u] [-m] [-v]",
+	NULL,
 };
 
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	long val;
-
-	switch (key) {
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case 'c':
-		errno = 0;
-		val = strtol(arg, NULL, 10);
-		if (errno || val < 0) {
-			warn("invalid core: %s\n", arg);
-			argp_usage(state);
-		}
-		core = val;
-		break;
-	case 'i':
-		errno = 0;
-		val = strtol(arg, NULL, 10);
-		if (errno || val <= 0) {
-			warn("invalid interval: %s\n", arg);
-			argp_usage(state);
-		}
-		interval = val;
-		break;
-	case 'd':
-		errno = 0;
-		val = strtol(arg, NULL, 10);
-		if (errno || val <= 0) {
-			warn("invalid duration: %s\n", arg);
-			argp_usage(state);
-		}
-		duration = val;
-		break;
-	case 'f':
-		ftrace = true;
-		break;
-	case 'I':
-		isr_time = true;
-		break;
-	case 'T':
-		timestamp = true;
-		break;
-	case 'u':
-		microseconds = true;
-		break;
-	case 'm':
-		milliseconds = true;
-		break;
-	case 'v':
-		verbose = true;
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
+static struct argparse_option options[] = {
+	OPT_INTEGER('c', "core", &core, "filter specific CPU core", NULL, 0, 0),
+	OPT_INTEGER('i', "interval", &interval, "summary interval, in seconds", NULL, 0, 0),
+	OPT_INTEGER('d', "duration", &duration, "total duration of trace, in seconds", NULL, 0, 0),
+	OPT_BOOLEAN('f', "ftrace", &ftrace, "ftrace debug", NULL, 0, 0),
+	OPT_BOOLEAN('I', "isr_time", &isr_time, "smc latency includes ISR interrupt time", NULL, 0, 0),
+	OPT_BOOLEAN('T', "timestamp", &timestamp, "include timestamp on output", NULL, 0, 0),
+	OPT_BOOLEAN('u', "microseconds", &microseconds, "microsecond histogram", NULL, 0, 0),
+	OPT_BOOLEAN('m', "milliseconds", &milliseconds, "millisecond histogram", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &verbose, "print the BPF program (for debugging purposes)", NULL, 0, 0),
+	OPT_HELP(),
+	OPT_END(),
+};
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -157,22 +103,34 @@ static int read_proc_stat(struct cpu_stat *stats)
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_program_doc,
-	};
 	struct smclatency_bpf *obj;
 	struct cpu_stat *start_stats = NULL, *end_stats = NULL;
 	__u64 *latency_vals = NULL;
+	struct argparse argparse;
 	int err;
 	const char *label;
 	long clk_tck;
 	time_t start_time_t;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, argp_program_doc, NULL);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (core < 0 && core != -1) {
+		warn("invalid core: %d\n", core);
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (interval <= 0 && interval != -1) {
+		warn("invalid interval: %d\n", interval);
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (duration <= 0 && duration != -1) {
+		warn("invalid duration: %d\n", duration);
+		argparse_usage(&argparse);
+		return 1;
+	}
 
 	clk_tck = sysconf(_SC_CLK_TCK);
 	if (clk_tck <= 0) {

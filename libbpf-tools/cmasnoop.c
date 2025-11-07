@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
 /* Copyright (c) 2021 Realtek, Inc. */
-#include <argp.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -17,6 +16,7 @@
 #include "cmasnoop.h"
 #include "cmasnoop.skel.h"
 #include "trace_helpers.h"
+#include "argparse.h"
 
 static struct env {
 	bool addr_range;
@@ -27,12 +27,13 @@ static struct env {
 	.duration = 0,
 };
 
-const char *argp_program_version = "cmasnoop 0.1";
-const char *argp_program_bug_address = "https://github.com/iovisor/bcc/tree/master/libbpf-tools";
-const char argp_program_doc[] =
+static const char *const usages[] = {
+	"cmasnoop [-h] [-d DURATION] [--contig_range] [-r]",
+	NULL,
+};
+
+const char doc[] =
 "Trace CMA allocation.\n"
-"\n"
-"USAGE: ./cmasnoop [-d DURATION] [--contig_range] [-r]\n"
 "\n"
 "EXAMPLES:\n"
 "    ./cmasnoop                   # trace all cma allocations\n"
@@ -40,42 +41,14 @@ const char argp_program_doc[] =
 "    ./cmasnoop --contig_range    # track alloc_contig_range()\n"
 "    ./cmasnoop -r                # track CMA track address range\n";
 
-static const struct argp_option opts[] = {
-	{ "addr_range", 'r', 0, 0, "Track address range", 0 },
-	{ "contig_range", 'c', 0, 0, "Track alloc_contig_range()", 0 },
-	{ "duration", 'd', "SECONDS", 0, "Total duration of trace in seconds", 0 },
-	{ "verbose", 'v', 0, 0, "Verbose debug output", 0 },
-	{},
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_BOOLEAN('r', "addr_range", &env.addr_range, "Track address range", NULL, 0, 0),
+	OPT_BOOLEAN('c', "contig_range", &env.contig_range, "Track alloc_contig_range()", NULL, 0, 0),
+	OPT_INTEGER('d', "duration", &env.duration, "Total duration of trace in seconds", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_END(),
 };
-
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	switch (key) {
-	case 'r':
-		env.addr_range = true;
-		break;
-	case 'c':
-		env.contig_range = true;
-		break;
-	case 'd':
-		errno = 0;
-		env.duration = strtol(arg, NULL, 10);
-		if (errno || env.duration <= 0) {
-			fprintf(stderr, "Invalid duration: %s\n", arg);
-			argp_usage(state);
-		}
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case ARGP_KEY_ARG:
-		argp_usage(state);
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -150,20 +123,21 @@ static void print_headers(void)
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_program_doc,
-	};
+	struct argparse argparse;
 	struct ring_buffer *rb = NULL;
 	struct cmasnoop_bpf *skel;
 	int err;
 	time_t start_time;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, "Trace CMA allocation.", doc);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
 
+	if (env.duration < 0) {
+		fprintf(stderr, "Invalid duration: %d\n", env.duration);
+		argparse_usage(&argparse);
+		return 1;
+	}
 	if (env.contig_range && env.addr_range) {
 		fprintf(stderr, "ERROR: We don't support contig_range and addr_range together yet\n");
 		return 1;

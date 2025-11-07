@@ -15,6 +15,7 @@
 #include <limits.h>
 
 #include "whoentercritical.skel.h"
+#include "argparse.h"
 
 // Define structs locally for easy access, matching the eBPF code
 enum addr_offs {
@@ -49,6 +50,17 @@ static struct whoentercritical_bpf *skel;
 static int exiting = 0;
 static int print_timestamp = 0;
 static int num_cpus = 0;
+
+static const char *const usages[] = {
+	"whoentercritical [-h] [-T]",
+	NULL,
+};
+
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_BOOLEAN('T', "timestamp", &print_timestamp, "Print a timestamp before each output block.", NULL, 0, 0),
+	OPT_END(),
+};
 
 /*
  * Reads the command name for a given PID from /proc/<pid>/comm.
@@ -312,16 +324,15 @@ int main(int argc, char **argv)
 {
     int err = 0; // Initialize err to 0 to prevent uninitialized warning/error
 
-    if (argc > 1) {
-        if (strcmp(argv[1], "-h") == 0) {
-            printf("Usage: %s [-T]\n", argv[0]);
-            printf("\nOptions:\n");
-            printf("  -T  Print a timestamp before each output block.\n");
-            printf("  -h  Show this help message.\n");
-            return 0; // Exit after showing help
-        } else if (strcmp(argv[1], "-T") == 0) {
-            print_timestamp = 1;
-        }
+    struct argparse argparse;
+    argparse_init(&argparse, options, usages, 0);
+    argparse_describe(&argparse, "Find who entered critical section last (Tracepoint on preemptirq/irq_disable, preemptirq/preempt_disable)", NULL);
+    argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+    if (argc > 0) {
+        fprintf(stderr, "Error: Unknown arguments.\n");
+        argparse_usage(&argparse);
+        return 1;
     }
 
     signal(SIGINT, sig_handler);

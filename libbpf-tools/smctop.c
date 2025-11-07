@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
-#include <argp.h>
+#include "argparse.h"
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -46,91 +46,29 @@ const char argp_program_doc[] =
 "    smctop -I          # OPTEE latency includes ISR interrupt & sched out time\n"
 "    smctop -c 2        # filter CPU core 2\n";
 
-static const struct argp_option opts[] = {
-	{ "noclear", 'C', NULL, 0, "Don't clear the screen", 0 },
-	{ "maxrows", 'r', "ROWS", 0, "Maximum rows to print, default 40", 0 },
-	{ "per-optee-call", 'o', NULL, 0, "Measure latency per optee call instead of smc call", 0 },
-	{ "isr-schout-time", 'I', NULL, 0, "OPTEE latency includes ISR interrupt & schedule out time", 0 },
-	{ "core", 'c', "CORE", 0, "Filter specific CPU core", 0 },
-	{ "ftrace", 'f', NULL, 0, "ftrace debug", 0 },
-	{ "timestamp", 'T', NULL, 0, "Include timestamp on output", 0 },
-	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
-	{},
-};
-
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
+static int handle_noclear(struct argparse *self, const struct argparse_option *option)
 {
-	long rows, core_id;
-	static int pos_args;
-
-	switch (key) {
-	case 'C':
-		clear_screen = false;
-		break;
-	case 'r':
-		errno = 0;
-		rows = strtol(arg, NULL, 10);
-		if (errno || rows <= 0) {
-			warn("invalid rows: %s\n", arg);
-			argp_usage(state);
-		}
-		output_rows = rows;
-		if (output_rows > OUTPUT_ROWS_LIMIT)
-			output_rows = OUTPUT_ROWS_LIMIT;
-		break;
-	case 'o':
-		per_optee_call = true;
-		break;
-	case 'I':
-		isr_schout_time = true;
-		break;
-	case 'c':
-		errno = 0;
-		core_id = strtol(arg, NULL, 10);
-		if (errno || core_id < 0) {
-			warn("invalid core: %s\n", arg);
-			argp_usage(state);
-		}
-		core = core_id;
-		break;
-	case 'f':
-		ftrace = true;
-		break;
-	case 'T':
-		timestamp = true;
-		break;
-	case 'v':
-		verbose = true;
-		break;
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case ARGP_KEY_ARG:
-		errno = 0;
-		if (pos_args == 0) {
-			interval = strtol(arg, NULL, 10);
-			if (errno || interval <= 0) {
-				warn("invalid interval\n");
-				argp_usage(state);
-			}
-		} else if (pos_args == 1) {
-			count = strtol(arg, NULL, 10);
-			if (errno || count <= 0) {
-				warn("invalid count\n");
-				argp_usage(state);
-			}
-		} else {
-			warn("unrecognized positional argument: %s\n", arg);
-			argp_usage(state);
-		}
-		pos_args++;
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
+	clear_screen = false;
 	return 0;
 }
+
+static const char * const usages[] = {
+	"smctop [-h] [interval] [count]",
+	NULL,
+};
+
+static struct argparse_option options[] = {
+	OPT_BOOLEAN('C', "noclear", NULL, "Don't clear the screen", handle_noclear, 0, 0),
+	OPT_INTEGER('r', "maxrows", &output_rows, "Maximum rows to print, default 40", NULL, 0, 0),
+	OPT_BOOLEAN('o', "per-optee-call", &per_optee_call, "Measure latency per optee call instead of smc call", NULL, 0, 0),
+	OPT_BOOLEAN('I', "isr-schout-time", &isr_schout_time, "OPTEE latency includes ISR interrupt & schedule out time", NULL, 0, 0),
+	OPT_INTEGER('c', "core", &core, "Filter specific CPU core", NULL, 0, 0),
+	OPT_BOOLEAN('f', "ftrace", &ftrace, "ftrace debug", NULL, 0, 0),
+	OPT_BOOLEAN('T', "timestamp", &timestamp, "Include timestamp on output", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_HELP(),
+	OPT_END(),
+};
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -232,18 +170,50 @@ static int print_stat(struct smctop_bpf *obj)
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_program_doc,
-	};
 	struct smctop_bpf *obj;
+	struct argparse argparse;
 	int err;
 	bool use_optee_tp = false;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, argp_program_doc, NULL);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (output_rows <= 0) {
+		warn("invalid rows: %d\n", output_rows);
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (output_rows > OUTPUT_ROWS_LIMIT)
+		output_rows = OUTPUT_ROWS_LIMIT;
+
+	if (core < -1) {
+		warn("invalid core: %d\n", core);
+		argparse_usage(&argparse);
+		return 1;
+	}
+
+	if (argc > 0) {
+		interval = atoi(argv[0]);
+		if (interval <= 0) {
+			warn("invalid interval\n");
+			argparse_usage(&argparse);
+			return 1;
+		}
+	}
+	if (argc > 1) {
+		count = atoi(argv[1]);
+		if (count <= 0) {
+			warn("invalid count\n");
+			argparse_usage(&argparse);
+			return 1;
+		}
+	}
+	if (argc > 2) {
+		warn("unrecognized positional arguments\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
 
 	libbpf_set_print(libbpf_print_fn);
 
