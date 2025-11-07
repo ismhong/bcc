@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
 // Copyright (c) 2025 Realtek, Inc.
-#include <argp.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -16,6 +15,7 @@
 #include "memleaktop.h"
 #include "memleaktop.skel.h"
 #include "trace_helpers.h"
+#include "argparse.h"
 
 #define MAX_ENTRIES 10240
 
@@ -56,13 +56,34 @@ static struct env {
 
 static volatile bool exiting;
 
-const char *argp_program_version = "memleaktop 0.1";
-const char *argp_program_bug_address =
-	"https://github.com/iovisor/bcc/tree/master/libbpf-tools";
-const char argp_args_doc[] =
+static char *sample_rate_str;
+static int cb_sample_rate(struct argparse *self, const struct argparse_option *option)
+{
+	env.sample_rate = strtoull(sample_rate_str, NULL, 10);
+	return 0;
+}
+
+static char *min_size_str;
+static int cb_min_size(struct argparse *self, const struct argparse_option *option)
+{
+	env.min_size = strtoull(min_size_str, NULL, 10);
+	return 0;
+}
+
+static char *max_size_str;
+static int cb_max_size(struct argparse *self, const struct argparse_option *option)
+{
+	env.max_size = strtoull(max_size_str, NULL, 10);
+	return 0;
+}
+
+static const char *const usages[] = {
+	"memleaktop [-h] [-i INTERVAL] [-s SAMPLE_RATE] [-r MAXROWS] [-z MIN_SIZE] [-Z MAX_SIZE] [-p PID] [-t TID] [-e] [-T] [-j] [--wa-missing-free] [-m MAP_SIZE]",
+	NULL,
+};
+
+const char doc[] =
 "Trace outstanding memory allocations to detect memory leaks.\n"
-"\n"
-"USAGE: memleaktop [-h] [-i INTERVAL] [-s SAMPLE_RATE] [-r MAXROWS] [-z MIN_SIZE] [-Z MAX_SIZE] [-p PID] [-t TID] [-e] [-T] [-j] [--wa-missing-free] [-m MAP_SIZE]\n"
 "\n"
 "EXAMPLES:\n"
 "    ./memleaktop -i 20 -T         # Output every 20 second summary with timestamp\n"
@@ -73,74 +94,24 @@ const char argp_args_doc[] =
 "    ./memleaktop -t 123           # Only trace TID 123\n"
 "    ./memleaktop -e               # Print per memory alloc size\n";
 
-static const struct argp_option opts[] = {
-	{ "help", 'h', 0, 0, "Show this help message and exit", 0 },
-	{ "interval", 'i', "INTERVAL", 0, "summary interval, seconds. Default 30", 0 },
-	{ "csv", 'j', 0, 0, "just print fields: comma-separated values", 0 },
-	{ "pid", 'p', "PID", 0, "trace with this pid only", 0 },
-	{ "tid", 't', "TID", 0, "trace with this tid only", 0 },
-	{ "sample-rate", 's', "RATE", 0, "sample every N-th allocation to decrease the overhead", 0 },
-	{ "maxrows", 'r', "MAXROWS", 0, "maximum rows to print, default 30", 0 },
-	{ "min-size", 'z', "SIZE", 0, "capture only allocations larger than or equal to this size", 0 },
-	{ "max-size", 'Z', "SIZE", 0, "capture only allocations smaller than or equal to this size", 0 },
-	{ "extend", 'e', 0, 0, "print per memory alloc size", 0 },
-	{ "timestamp", 'T', 0, 0, "include timestamp on output", 0 },
-	{ "verbose", 'v', 0, 0, "print the BPF program (for debugging purposes)", 0 },
-	{ "wa-missing-free", 1, 0, 0, "Workaround to alleviate misjudgements when free is missing", 0 },
-	{ "map-size", 'm', "SIZE", 0, "total entries of BPF map to track memleak. Default 500000", 0 },
-	{},
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_INTEGER('i', "interval", &env.interval, "summary interval, seconds. Default 30", NULL, 0, 0),
+	OPT_BOOLEAN('j', "csv", &env.csv, "just print fields: comma-separated values", NULL, 0, 0),
+	OPT_INTEGER('p', "pid", &env.pid, "trace with this pid only", NULL, 0, 0),
+	OPT_INTEGER('t', "tid", &env.tid, "trace with this tid only", NULL, 0, 0),
+	OPT_STRING('s', "sample-rate", &sample_rate_str, "sample every N-th allocation to decrease the overhead", cb_sample_rate, 0, 0),
+	OPT_INTEGER('r', "maxrows", &env.maxrows, "maximum rows to print, default 30", NULL, 0, 0),
+	OPT_STRING('z', "min-size", &min_size_str, "capture only allocations larger than or equal to this size", cb_min_size, 0, 0),
+	OPT_STRING('Z', "max-size", &max_size_str, "capture only allocations smaller than or equal to this size", cb_max_size, 0, 0),
+	OPT_BOOLEAN('e', "extend", &env.extend, "print per memory alloc size", NULL, 0, 0),
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "include timestamp on output", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "print the BPF program (for debugging purposes)", NULL, 0, 0),
+	OPT_BOOLEAN(0, "wa-missing-free", &env.wa_missing_free, "Workaround to alleviate misjudgements when free is missing", NULL, 0, 0),
+	OPT_INTEGER('m', "map-size", &env.map_size, "total entries of BPF map to track memleak. Default 500000", NULL, 0, 0),
+	OPT_END(),
 };
 
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	switch (key) {
-	case 'h':
-		argp_state_help(state, stdout, ARGP_HELP_USAGE | ARGP_HELP_LONG);
-		exit(0);
-	case 'i':
-		env.interval = strtol(arg, NULL, 10);
-		break;
-	case 'j':
-		env.csv = true;
-		break;
-	case 'p':
-		env.pid = strtol(arg, NULL, 10);
-		break;
-	case 't':
-		env.tid = strtol(arg, NULL, 10);
-		break;
-	case 's':
-		env.sample_rate = strtol(arg, NULL, 10);
-		break;
-	case 'r':
-		env.maxrows = strtol(arg, NULL, 10);
-		break;
-	case 'z':
-		env.min_size = strtol(arg, NULL, 10);
-		break;
-	case 'Z':
-		env.max_size = strtol(arg, NULL, 10);
-		break;
-	case 'e':
-		env.extend = true;
-		break;
-	case 'T':
-		env.timestamp = true;
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case 1: /* --wa-missing-free */
-		env.wa_missing_free = true;
-		break;
-	case 'm':
-		env.map_size = strtol(arg, NULL, 10);
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -250,18 +221,13 @@ static int print_summary(struct memleaktop_bpf *skel)
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_args_doc,
-	};
+	struct argparse argparse;
 	int err;
 	struct memleaktop_bpf *skel;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
-
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, "Trace outstanding memory allocations to detect memory leaks.", doc);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
 	if (env.min_size != 0 && env.max_size != -1 && env.min_size > env.max_size) {
 		fprintf(stderr, "min_size can't be greater than max_size\n");
 		return 1;

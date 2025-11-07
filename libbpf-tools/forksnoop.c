@@ -1,5 +1,4 @@
 // Based on forksnoop(8) from bcc by msinwu.
-#include <argp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +13,7 @@
 #include "forksnoop.skel.h"
 #include "btf_helpers.h"
 #include "trace_helpers.h"
+#include "argparse.h"
 
 #define PERF_POLL_TIMEOUT_MS	100
 
@@ -38,82 +38,34 @@ static struct env {
 	.mode = "all",
 };
 
-const char *argp_program_version = "forksnoop 0.1";
-const char *argp_program_bug_address =
-"https://github.com/iovisor/bcc/tree/master/libbpf-tools";
-const char argp_program_doc[] =
-"Trace fork, exec, exit and rename syscalls.\n\
-\nUSAGE: forksnoop [-h] [-p PID] [-t TID] [-d DURATION] [-u] [-s SORT] [-e EVENT] [-m MODE]\n\
-\nEXAMPLES:\n\
-./forksnoop           # trace all process events\n\
-./forksnoop -p 181    # only trace PID 181\n\
-./forksnoop -t 123    # only trace TID 123\n\
-./forksnoop -d 10     # trace for 10 seconds\n\
-./forksnoop -s fork   # sort by fork event count\n\
-./forksnoop -m stat   # only show event statistics\n";
-
-static const struct argp_option opts[] = {
-	{ "pid", 'p', "PID", 0, "trace this PID only", 0 },
-	{ "tid", 't', "TID", 0, "trace this TID only", 0 },
-	{ "duration", 'd', "SECONDS", 0, "total duration of trace, in seconds", 0 },
-	{ "timeunit", 'u', NULL, 0, "set humanable time unit", 0 },
-	{ "sort", 's', "FIELD", 0, "sort by specific field, default all", 0 },
-	{ "event", 'e', "EVENT", 0, "trace with this event only, default all", 0 },
-	{ "mode", 'm', "MODE", 0, "output display mode, default all", 0 },
-	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
-	{},
+static const char *const usages[] = {
+	"forksnoop [-h] [-p PID] [-t TID] [-d DURATION] [-u] [-s SORT] [-e EVENT] [-m MODE]",
+	NULL,
 };
 
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	long int pid, tid;
+const char doc[] =
+"Trace fork, exec, exit and rename syscalls.\n"
+"\nUSAGE: forksnoop [-h] [-p PID] [-t TID] [-d DURATION] [-u] [-s SORT] [-e EVENT] [-m MODE]\n"
+"\nEXAMPLES:\n"
+"./forksnoop           # trace all process events\n"
+"./forksnoop -p 181    # only trace PID 181\n"
+"./forksnoop -t 123    # only trace TID 123\n"
+"./forksnoop -d 10     # trace for 10 seconds\n"
+"./forksnoop -s fork   # sort by fork event count\n"
+"./forksnoop -m stat   # only show event statistics\n";
 
-	switch (key) {
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case 'p':
-		errno = 0;
-		pid = strtol(arg, NULL, 10);
-		if (errno || pid <= 0) {
-			fprintf(stderr, "Invalid PID %s\n", arg);
-			argp_usage(state);
-		}
-		env.pid = pid;
-		break;
-	case 't':
-		errno = 0;
-		tid = strtol(arg, NULL, 10);
-		if (errno || tid <= 0) {
-			fprintf(stderr, "Invalid TID %s\n", arg);
-			argp_usage(state);
-		}
-		env.tid = tid;
-		break;
-	case 'd':
-		env.duration = strtol(arg, NULL, 10);
-		break;
-	case 'u':
-		env.timeunit = true;
-		break;
-	case 's':
-		env.sort_by = arg;
-		break;
-	case 'e':
-		env.event = arg;
-		break;
-	case 'm':
-		env.mode = arg;
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_INTEGER('p', "pid", &env.pid, "trace this PID only", NULL, 0, 0),
+	OPT_INTEGER('t', "tid", &env.tid, "trace this TID only", NULL, 0, 0),
+	OPT_INTEGER('d', "duration", &env.duration, "total duration of trace, in seconds", NULL, 0, 0),
+	OPT_BOOLEAN('u', "timeunit", &env.timeunit, "set humanable time unit", NULL, 0, 0),
+	OPT_STRING('s', "sort", &env.sort_by, "sort by specific field, default all", NULL, 0, 0),
+	OPT_STRING('e', "event", &env.event, "trace with this event only, default all", NULL, 0, 0),
+	OPT_STRING('m', "mode", &env.mode, "output display mode, default all", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_END(),
+};
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -252,19 +204,23 @@ cleanup:
 int main(int argc, char **argv)
 {
 	LIBBPF_OPTS(bpf_object_open_opts, open_opts);
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_program_doc,
-	};
+	struct argparse argparse;
 	struct ring_buffer *rb = NULL;
 	struct forksnoop_bpf *obj;
 	int err;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, "Trace fork, exec, exit and rename syscalls.", doc);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
 
+	if (env.pid != INVALID_PID && env.pid <= 0) {
+		fprintf(stderr, "Invalid PID: must be a positive integer\n");
+		return 1;
+	}
+	if (env.tid != INVALID_PID && env.tid <= 0) {
+		fprintf(stderr, "Invalid TID: must be a positive integer\n");
+		return 1;
+	}
 	libbpf_set_print(libbpf_print_fn);
 
 	err = ensure_core_btf(&open_opts);

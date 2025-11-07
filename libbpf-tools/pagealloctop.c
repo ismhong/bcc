@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
-#include <argp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +12,7 @@
 #include "pagealloctop.h"
 #include "pagealloctop.skel.h"
 #include "trace_helpers.h"
+#include "argparse.h"
 
 #define MAX_ENTRIES 10240
 
@@ -34,9 +34,12 @@ static struct env {
 	.verbose = false,
 };
 
-const char *argp_program_version = "pagealloctop 0.1";
-const char *argp_program_bug_address = "iovisor/bcc <project@iovisor.org>";
-const char argp_program_doc[] =
+static const char *const usages[] = {
+	"pagealloctop [-h] [-i INTERVAL] [-d DURATION] [-m] [-T] [-t TOP]",
+	NULL,
+};
+
+static const char doc[] =
 "Analyze page allocation as a table.\n"
 "\n"
 "USAGE: ./pagealloctop [-h] [-i INTERVAL] [-d DURATION] [-m] [-T] [-t TOP]\n"
@@ -47,78 +50,16 @@ const char argp_program_doc[] =
 "    ./pagealloctop -i 2 -m           # output every 2 seconds as megabytes\n"
 "    ./pagealloctop -i 2 -t 50        # 50 top rank list\n";
 
-static const struct argp_option opts[] = {
-	{ "interval", 'i', "SECONDS", 0, "summary interval, in seconds", 0 },
-	{ "duration", 'd', "SECONDS", 0, "total duration of trace, in seconds", 0 },
-	{ "megabyte", 'm', NULL, 0, "output in megabytes", 0 },
-	{ "timestamp", 'T', NULL, 0, "include timestamp on output", 0 },
-	{ "top", 't', "COUNT", 0, "display only this many top allocating stacks (by size)", 0 },
-	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, ARGP_KEY_FINI, "Show this help message and exit", 0 },
-	{},
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_INTEGER('i', "interval", &env.interval, "summary interval, in seconds", NULL, 0, 0),
+	OPT_INTEGER('d', "duration", &env.duration, "total duration of trace, in seconds", NULL, 0, 0),
+	OPT_BOOLEAN('m', "megabyte", &env.megabyte, "output in megabytes", NULL, 0, 0),
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "include timestamp on output", NULL, 0, 0),
+	OPT_INTEGER('t', "top", &env.top, "display only this many top allocating stacks (by size)", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_END(),
 };
-
-static error_t parse_arg(int key, char *arg, struct argp_state *state);
-
-static const struct argp argp = {
-	.options = opts,
-	.parser = parse_arg,
-	.doc = argp_program_doc,
-};
-
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	switch (key) {
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case 'i':
-		errno = 0;
-		env.interval = strtol(arg, NULL, 10);
-		if (errno || env.interval <= 0) {
-			fprintf(stderr, "Invalid interval\n");
-			argp_usage(state);
-		}
-		break;
-	case 'd':
-		errno = 0;
-		env.duration = strtol(arg, NULL, 10);
-		if (errno || env.duration <= 0) {
-			fprintf(stderr, "Invalid duration\n");
-			argp_usage(state);
-		}
-		break;
-	case 'm':
-		env.megabyte = true;
-		break;
-	case 'T':
-		env.timestamp = true;
-		break;
-	case 't':
-		errno = 0;
-		env.top = strtol(arg, NULL, 10);
-		if (errno || env.top <= 0) {
-			fprintf(stderr, "Invalid top count\n");
-			argp_usage(state);
-		}
-		break;
-	case ARGP_KEY_END:
-		if (env.duration != 99999999) {
-			if (env.interval == 0)
-				env.interval = env.duration;
-			env.count = env.duration / env.interval;
-		}
-		if (env.interval == 0)
-			env.interval = 99999999;
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -232,14 +173,38 @@ static int print_stat(struct pagealloctop_bpf *skel)
 int main(int argc, char **argv)
 {
 	struct pagealloctop_bpf *skel;
+	struct argparse argparse;
 	int err;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, doc, "\n");
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (env.interval <= 0) {
+		fprintf(stderr, "Invalid interval\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (env.duration <= 0) {
+		fprintf(stderr, "Invalid duration\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (env.top <= 0) {
+		fprintf(stderr, "Invalid top count\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
+
+	if (env.duration != 99999999) {
+		if (env.interval == 0)
+			env.interval = env.duration;
+		env.count = env.duration / env.interval;
+	}
+	if (env.interval == 0)
+		env.interval = 99999999;
 
 	libbpf_set_print(libbpf_print_fn);
-
 	if (!tracepoint_exists("kmem", "mm_page_alloc")) {
 		fprintf(stderr, "ERROR: Required tracepoint kmem:mm_page_alloc doesn't exist\n");
 		return 1;

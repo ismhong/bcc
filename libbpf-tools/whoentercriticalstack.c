@@ -7,7 +7,6 @@
 #include <signal.h>
 #include <unistd.h>
 #include <time.h>
-#include <argp.h>
 #include <stdbool.h>
 #include <sys/sysinfo.h>
 
@@ -18,24 +17,7 @@
 #include "trace_helpers.h"
 
 #include "whoentercriticalstack.skel.h"
-
-// ------------------------------------------------------------------
-// Program Info (Required for Argp)
-// ------------------------------------------------------------------
-const char *argp_program_version = "whoentercriticalstack 0.1";
-const char *argp_program_bug_address = "msinwu@realtek.com";
-
-static const char argp_program_doc[] =
-"Record the last suspect who entered critical section\n"
-"\n"
-"USAGE: whoentercriticalstack [-h] [-P PID] [-p | -i] [-T] [--stack-storage-size SIZE]\n"
-"\n"
-"examples:\n"
-"  ./whoentercriticalstack -T         # Analysis what stack disabled IRQ/preempt last\n"
-"  ./whoentercriticalstack -p         # Analysis what stack disabled preempt last\n"
-"  ./whoentercriticalstack -i         # Analysis what stack disabled IRQ last\n"
-"  ./whoentercriticalstack -P 210 -p  # Analysis what stack disabled preempt last with PID 210\n";
-
+#include "argparse.h"
 
 // ------------------------------------------------------------------
 // Global Environment Parameters Structure
@@ -62,70 +44,20 @@ static void sig_handler(int sig);
 static int compare_u32(const void *a, const void *b);
 static void print_stacks(struct ksyms *ksyms);
 
-
-#define OPT_STACK_STORAGE_SIZE 1
-
-static const struct argp_option opts[] = {
-    {"pid", 'P', "PID", 0, "trace this PID only", 0},
-    {"preemptoff", 'p', NULL, 0, "Find long sections where preemption was off (Default)", 0},
-    {"irqoff", 'i', NULL, 0, "Find long sections where IRQ was off", 0},
-    {"timestamp", 'T', NULL, 0, "include timestamp on output", 0},
-    {"stack-storage-size", OPT_STACK_STORAGE_SIZE, "SIZE", 0, "the number of unique stack traces (default 16384)", 0},
-    { NULL, 'h', NULL, OPTION_HIDDEN, "show this help message and exit", 0 },
-    {},
+static const char *const usages[] = {
+	"whoentercriticalstack [-h] [-P PID] [-p | -i] [-T] [--stack-storage-size SIZE]",
+	NULL,
 };
 
-
-// ------------------------------------------------------------------
-// Argp Parse Function
-// ------------------------------------------------------------------
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-    switch (key) {
-        case 'P':
-            errno = 0;
-            env.pid_filter = strtol(arg, NULL, 10);
-            if (errno || env.pid_filter <= 0) {
-                fprintf(stderr, "Invalid PID: %s\n", arg);
-                argp_usage(state);
-            }
-            break;
-        case 'p':
-            env.preempt_mode = true;
-            env.irq_mode = false;
-            break;
-        case 'i':
-            env.irq_mode = true;
-            env.preempt_mode = false;
-            break;
-        case 'T':
-            env.print_timestamp = true;
-            break;
-        case OPT_STACK_STORAGE_SIZE:
-            errno = 0;
-            env.stack_storage_size = strtol(arg, NULL, 10);
-            if (errno || env.stack_storage_size <= 0) {
-                fprintf(stderr, "Invalid stack storage size: %s\n", arg);
-                argp_usage(state);
-            }
-            break;
-        case 'h':
-            argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-            break;
-        case ARGP_KEY_END:
-            // Handle mode conflict or default mode
-            if (env.irq_mode && env.preempt_mode) {
-                env.preempt_mode = false;
-            } else if (!env.irq_mode && !env.preempt_mode) {
-                env.preempt_mode = true;
-            }
-            break;
-        default:
-            return ARGP_ERR_UNKNOWN;
-    }
-    return 0;
-}
-
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_INTEGER('P', "pid", &env.pid_filter, "trace this PID only", NULL, 0, 0),
+	OPT_BOOLEAN('p', "preemptoff", &env.preempt_mode, "Find long sections where preemption was off (Default)", NULL, 0, 0),
+	OPT_BOOLEAN('i', "irqoff", &env.irq_mode, "Find long sections where IRQ was off", NULL, 0, 0),
+	OPT_BOOLEAN('T', "timestamp", &env.print_timestamp, "include timestamp on output", NULL, 0, 0),
+	OPT_INTEGER(0, "stack-storage-size", &env.stack_storage_size, "the number of unique stack traces (default 16384)", NULL, 0, 0),
+	OPT_END(),
+};
 
 // ------------------------------------------------------------------
 // Map/Structure Definitions
@@ -279,21 +211,33 @@ static void print_stacks(struct ksyms *ksyms)
 
 int main(int argc, char **argv)
 {
-    static const struct argp argp = {
-        .options = opts,
-        .parser = parse_arg,
-        .doc = argp_program_doc,
-        .args_doc = " ",
-    };
-
     int err = 0;
     int num_cpus = 0;
     struct ksyms *ksyms = NULL;
 
-    // Parse arguments using argp
-    err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-    if (err)
-        return err;
+    struct argparse argparse;
+    argparse_init(&argparse, options, usages, 0);
+    argparse_describe(&argparse,
+                      "Record the last suspect who entered critical section",
+                      "examples:\n"
+                      "  ./whoentercriticalstack -T         # Analysis what stack disabled IRQ/preempt last\n"
+                      "  ./whoentercriticalstack -p         # Analysis what stack disabled preempt last\n"
+                      "  ./whoentercriticalstack -i         # Analysis what stack disabled IRQ last\n"
+                      "  ./whoentercriticalstack -P 210 -p  # Analysis what stack disabled preempt last with PID 210\n");
+    argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+    if (argc > 0) {
+        fprintf(stderr, "Error: Unknown arguments.\n");
+        argparse_usage(&argparse);
+        return 1;
+    }
+
+    // Handle mode conflict or default mode
+    if (env.irq_mode && env.preempt_mode) {
+        env.preempt_mode = 0;
+    } else if (!env.irq_mode && !env.preempt_mode) {
+        env.preempt_mode = 1;
+    }
 
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);

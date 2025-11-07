@@ -11,7 +11,7 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
-#include <argp.h>
+#include "argparse.h"
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -48,6 +48,9 @@ static int interval = 1;
 static int count = 99999999;
 static bool verbose = false;
 
+static bool microseconds = false;
+static bool milliseconds = false;
+
 const char *argp_program_version = "schedblockedtop 0.1";
 const char *argp_program_bug_address =
 	"https://github.com/iovisor/bcc/tree/master/libbpf-tools";
@@ -63,86 +66,29 @@ const char argp_program_doc[] =
 "    schedblockedtop -I         # filter iowait=1 only\n"
 "    schedblockedtop -u         # display in microseconds\n";
 
-static const struct argp_option opts[] = {
-	{ "noclear", 'C', NULL, 0, "Don't clear the screen", 0 },
-	{ "maxrows", 'r', "ROWS", 0, "Maximum rows to print, default 40", 0 },
-	{ "microseconds", 'u', NULL, 0, "microsecond histogram", 0 },
-	{ "milliseconds", 'm', NULL, 0, "millisecond histogram", 0 },
-	{ "perpid", 'P', NULL, 0, "display separately for each process", 0 },
-	{ "iowait", 'I', NULL, 0, "filter iowait=1 only", 0 },
-	{ "timestamp", 'T', NULL, 0, "include timestamp on output", 0 },
-	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
-	{},
-};
-
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
+static int handle_noclear(struct argparse *self, const struct argparse_option *option)
 {
-	long rows;
-	static int pos_args;
-
-	switch (key) {
-	case 'C':
-		clear_screen = false;
-		break;
-	case 'r':
-		errno = 0;
-
-rows = strtol(arg, NULL, 10);
-		if (errno || rows <= 0) {
-			warn("invalid rows: %s\n", arg);
-			argp_usage(state);
-		}
-		output_rows = rows;
-		if (output_rows > OUTPUT_ROWS_LIMIT)
-			output_rows = OUTPUT_ROWS_LIMIT;
-		break;
-	case 'u':
-		scale = USEC;
-		break;
-	case 'm':
-		scale = MSEC;
-		break;
-	case 'P':
-		per_pid = true;
-		break;
-	case 'I':
-		io_wait_only = true;
-		break;
-	case 'T':
-		timestamp = true;
-		break;
-	case 'v':
-		verbose = true;
-		break;
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case ARGP_KEY_ARG:
-		errno = 0;
-		if (pos_args == 0) {
-			interval = strtol(arg, NULL, 10);
-			if (errno || interval <= 0) {
-				warn("invalid interval\n");
-				argp_usage(state);
-			}
-		} else if (pos_args == 1) {
-			count = strtol(arg, NULL, 10);
-			if (errno || count <= 0) {
-				warn("invalid count\n");
-				argp_usage(state);
-			}
-		} else {
-			warn("unrecognized positional argument: %s\n", arg);
-			argp_usage(state);
-		}
-		pos_args++;
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
+	clear_screen = false;
 	return 0;
 }
+
+static const char * const usages[] = {
+	"schedblockedtop [-h] [interval] [count]",
+	NULL,
+};
+
+static struct argparse_option options[] = {
+	OPT_BOOLEAN('C', "noclear", NULL, "Don't clear the screen", handle_noclear, 0, 0),
+	OPT_INTEGER('r', "maxrows", &output_rows, "Maximum rows to print, default 40", NULL, 0, 0),
+	OPT_BOOLEAN('u', "microseconds", &microseconds, "microsecond histogram", NULL, 0, 0),
+	OPT_BOOLEAN('m', "milliseconds", &milliseconds, "millisecond histogram", NULL, 0, 0),
+	OPT_BOOLEAN('P', "perpid", &per_pid, "display separately for each process", NULL, 0, 0),
+	OPT_BOOLEAN('I', "iowait", &io_wait_only, "filter iowait=1 only", NULL, 0, 0),
+	OPT_BOOLEAN('T', "timestamp", &timestamp, "include timestamp on output", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_HELP(),
+	OPT_END(),
+};
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -304,18 +250,49 @@ static bool check_kernel_settings(void)
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_program_doc,
-	};
 	struct schedblockedtop_bpf *obj;
 	struct ksyms *ksyms;
+	struct argparse argparse;
 	int err;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, argp_program_doc, NULL);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (milliseconds)
+		scale = MSEC;
+	else if (microseconds)
+		scale = USEC;
+
+	if (output_rows <= 0) {
+		warn("invalid rows: %d\n", output_rows);
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (output_rows > OUTPUT_ROWS_LIMIT)
+		output_rows = OUTPUT_ROWS_LIMIT;
+
+	if (argc > 0) {
+		interval = atoi(argv[0]);
+		if (interval <= 0) {
+			warn("invalid interval\n");
+			argparse_usage(&argparse);
+			return 1;
+		}
+	}
+	if (argc > 1) {
+		count = atoi(argv[1]);
+		if (count <= 0) {
+			warn("invalid count\n");
+			argparse_usage(&argparse);
+			return 1;
+		}
+	}
+	if (argc > 2) {
+		warn("unrecognized positional arguments\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
 
 	libbpf_set_print(libbpf_print_fn);
 

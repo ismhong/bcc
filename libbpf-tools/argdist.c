@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
-#include <argp.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -14,6 +13,7 @@
 #include "argdist.h"
 #include "argdist.skel.h"
 #include "trace_helpers.h"
+#include "argparse.h"
 
 #define warn(...) fprintf(stderr, "WARN: " __VA_ARGS__)
 #define err(...) fprintf(stderr, "ERR: " __VA_ARGS__)
@@ -50,14 +50,30 @@ static struct env {
 static struct btf *vmlinux_btf;
 static struct ksyms *ksyms;
 
-const char *argp_program_version = "argdist 0.1";
-const char *argp_program_bug_address =
-	"https://github.com/iovisor/bcc/tree/master/libbpf-tools";
-static const char args_doc[] = "";
-static const char program_doc[] =
+static const char *h_spec = NULL;
+static const char *c_spec = NULL;
+
+static int cb_histspec(struct argparse *self, const struct argparse_option *option)
+{
+	env.histspecs = realloc(env.histspecs, (env.hist_count + 1) * sizeof(*env.histspecs));
+	env.histspecs[env.hist_count++] = strdup(h_spec);
+	return 0;
+}
+
+static int cb_countspec(struct argparse *self, const struct argparse_option *option)
+{
+	env.countspecs = realloc(env.countspecs, (env.count_count + 1) * sizeof(*env.countspecs));
+	env.countspecs[env.count_count++] = strdup(c_spec);
+	return 0;
+}
+
+static const char *const usages[] = {
+	"argdist [-h] [-p PID] [-i INTERVAL] [-n COUNT] [-H SPEC] [-C SPEC] [-I FUNC]",
+	NULL,
+};
+
+static const char doc[] =
 "Trace a function and display a distribution of its parameter values.\n"
-"\n"
-"USAGE: argdist [-h] [-p PID] [-i INTERVAL] [-n COUNT] [-H SPEC] [-C SPEC] [-I FUNC]\n"
 "\n"
 "Probe specifier syntax:\n"
 "        {p,r}:[library]:function(signature):[type]:expr[:filter]\n"
@@ -93,60 +109,20 @@ static const char program_doc[] =
 "        Print frequency count of kmalloc sizes for PID 123 only\n"
 ;
 
-static const struct argp_option opts[] = {
-	{ "pid", 'p', "PID", 0, "Process ID to trace", 0 },
-	{ "info", 'I', "FUNC", 0, "Print kernel function prototype and exit", 0 },
-	{ "interval", 'i', "SECONDS", 0, "Output interval", 0 },
-	{ "count", 'n', "COUNT", 0, "Number of outputs", 0 },
-	{ "verbose", 'v', NULL, 0, "Verbose BPF logging", 0 },
-	{ "cumulative", 'c', NULL, 0, "Do not clear maps at each interval", 0 },
-	{ "histogram", 'H', "SPEC", 0, "Histogram probe specifier", 0 },
-	{ "count", 'C', "SPEC", 0, "Frequency count probe specifier", 0 },
-	{ "hex", 'x', NULL, 0, "Show event data in hexadecimal", 0 },
-	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
-	{},
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_GROUP("Basic options"),
+	OPT_INTEGER('p', "pid", &env.pid, "Process ID to trace", NULL, 0, 0),
+	OPT_STRING('I', "info", &env.info_func_name, "Print kernel function prototype and exit", NULL, 0, 0),
+	OPT_INTEGER('i', "interval", &env.interval, "Output interval", NULL, 0, 0),
+	OPT_INTEGER('n', "count", &env.count, "Number of outputs", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose BPF logging", NULL, 0, 0),
+	OPT_BOOLEAN('c', "cumulative", &env.cumulative, "Do not clear maps at each interval", NULL, 0, 0),
+	OPT_STRING('H', "histogram", &h_spec, "Histogram probe specifier", cb_histspec, 0, 0),
+	OPT_STRING('C', "count", &c_spec, "Frequency count probe specifier", cb_countspec, 0, 0),
+	OPT_BOOLEAN('x', "hex", &env.hex, "Show event data in hexadecimal", NULL, 0, 0),
+	OPT_END(),
 };
-
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	switch (key) {
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case 'p':
-		env.pid = strtol(arg, NULL, 10);
-		break;
-	case 'I':
-		env.info_func_name = strdup(arg);
-		break;
-	case 'i':
-		env.interval = strtol(arg, NULL, 10);
-		break;
-	case 'n':
-		env.count = strtol(arg, NULL, 10);
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case 'c':
-		env.cumulative = true;
-		break;
-	case 'x':
-		env.hex = true;
-		break;
-	case 'H':
-		env.histspecs = realloc(env.histspecs, (env.hist_count + 1) * sizeof(*env.histspecs));
-		env.histspecs[env.hist_count++] = strdup(arg);
-		break;
-	case 'C':
-		env.countspecs = realloc(env.countspecs, (env.count_count + 1) * sizeof(*env.countspecs));
-		env.countspecs[env.count_count++] = strdup(arg);
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -550,18 +526,14 @@ static void print_maps(struct argdist_bpf *skel)
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.args_doc = args_doc,
-		.doc = program_doc,
-	};
+	struct argparse argparse;
 	struct argdist_bpf *skel;
 	int err = 0;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, &env);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, doc, NULL);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
 
 	libbpf_set_print(libbpf_print_fn);
 

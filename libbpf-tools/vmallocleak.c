@@ -2,7 +2,7 @@
 // Copyright (c) 2022 Realtek, Inc.
 //
 // Based on vmallocleak from bcc by Edward Wu.
-#include <argp.h>
+#include "argparse.h"
 #include <errno.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -40,24 +40,6 @@ static volatile sig_atomic_t exiting;
 
 const char *argp_program_version = "vmallocleak 0.1";
 const char *argp_program_bug_address = "https://github.com/iovisor/bcc/tree/master/libbpf-tools";
-const char argp_args_doc[] =
-"USAGE: vmallocleak [-h] [-i INTERVAL] [-r MAXROWS] [-K] [-T]\n"
-"\n"
-"EXAMPLES:\n"
-"    ./vmallocleak -i 20 -T         # Output every 20 second summary with timestamp\n"
-"    ./vmallocleak -r 200           # Output 200 rows summary\n"
-"    ./vmallocleak -K               # Output kernel stack\n"
-"";
-
-static const struct argp_option argp_options[] = {
-	{"help", 'h', 0, 0, "Show this help message and exit", 0},
-	{"interval", 'i', "INTERVAL", 0, "summary interval, seconds. Default 30", 0},
-	{"maxrows", 'r', "MAXROWS", 0, "maximum rows to print, default 30", 0},
-	{"kernel-stacks", 'K', 0, 0, "analysis kernel stack", 0},
-	{"timestamp", 'T', 0, 0, "include timestamp on output", 0},
-	{"verbose", 'v', NULL, 0, "verbose debug output", 0 },
-	{},
-};
 
 struct outstanding_alloc {
 	struct key_t key;
@@ -76,45 +58,20 @@ static int alloc_size_compare(const void *a, const void *b)
 	return 0;
 }
 
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	switch (key) {
-	case 'h':
-		argp_usage(state);
-		break;
-	case 'i':
-		errno = 0;
-		env.interval = strtol(arg, NULL, 10);
-		if (errno || env.interval <= 0) {
-			fprintf(stderr, "invalid interval: %s\n", arg);
-			argp_usage(state);
-		}
-		break;
-	case 'r':
-		errno = 0;
-		env.maxrows = strtol(arg, NULL, 10);
-		if (errno || env.maxrows <= 0) {
-			fprintf(stderr, "invalid maxrows: %s\n", arg);
-			argp_usage(state);
-		}
-		break;
-	case 'K':
-		env.kernel_stacks = true;
-		break;
-	case 'T':
-		env.timestamp = true;
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case ARGP_KEY_ARG:
-		argp_usage(state);
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
+static const char * const usages[] = {
+	"vmallocleak [-h] [-i INTERVAL] [-r MAXROWS] [-K] [-T]",
+	NULL,
+};
+
+static struct argparse_option options[] = {
+	OPT_INTEGER('i', "interval", &env.interval, "summary interval, seconds. Default 30", NULL, 0, 0),
+	OPT_INTEGER('r', "maxrows", &env.maxrows, "maximum rows to print, default 30", NULL, 0, 0),
+	OPT_BOOLEAN('K', "kernel-stacks", &env.kernel_stacks, "analysis kernel stack", NULL, 0, 0),
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "include timestamp on output", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "verbose debug output", NULL, 0, 0),
+	OPT_HELP(),
+	OPT_END(),
+};
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -223,16 +180,28 @@ int main(int argc, char **argv)
 {
 	struct vmallocleak_bpf *skel;
 	int err;
-	static const struct argp argp = {
-		.options = argp_options,
-		.parser = parse_arg,
-		.doc = argp_args_doc,
-	};
+	struct argparse argparse;
 	struct ksyms *ksyms = NULL;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, "Virtual Contiguous Memory leak monitor", NULL);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (env.interval <= 0) {
+		fprintf(stderr, "invalid interval: %d\n", env.interval);
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (env.maxrows <= 0) {
+		fprintf(stderr, "invalid maxrows: %d\n", env.maxrows);
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (argc > 0) {
+		fprintf(stderr, "unrecognized positional arguments\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
 
 	libbpf_set_print(libbpf_print_fn);
 

@@ -1,4 +1,3 @@
-#include <argp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +14,7 @@
 #include "trace_helpers.h"
 #include "btf_helpers.h"
 #include <ctype.h>
+#include "argparse.h"
 
 static char *lcs(const char *s1, const char *s2)
 {
@@ -86,7 +86,7 @@ static char *lcs(const char *s1, const char *s2)
  * The final names are stored in the `state_names` array.
  */
 static void get_idle_state_names(char state_names[MAX_IDLE_STATE_NR][32],
-				   int state_num, int cpu_num)
+		int state_num, int cpu_num)
 {
 	memset(state_names, 0, sizeof(char) * MAX_IDLE_STATE_NR * 32);
 
@@ -95,7 +95,7 @@ static void get_idle_state_names(char state_names[MAX_IDLE_STATE_NR][32],
 		char *sub = NULL;
 
 		snprintf(path, sizeof(path),
-			 "/sys/devices/system/cpu/cpu0/cpuidle/state%d/name", i);
+				"/sys/devices/system/cpu/cpu0/cpuidle/state%d/name", i);
 		FILE *f = fopen(path, "r");
 
 		if (f) {
@@ -150,7 +150,7 @@ static void get_idle_state_names(char state_names[MAX_IDLE_STATE_NR][32],
 
 		for (;; repeat_idx++) {
 			snprintf(temp_name, sizeof(temp_name), "%s-%d", start,
-				 repeat_idx);
+					repeat_idx);
 			bool is_dup = false;
 			for (int k = 0; k < i; k++) {
 				if (strcmp(state_names[k], temp_name) == 0) {
@@ -171,9 +171,12 @@ static void get_idle_state_names(char state_names[MAX_IDLE_STATE_NR][32],
 
 #define warn(...) fprintf(stderr, __VA_ARGS__)
 
-const char *argp_program_version = "cpuidle 0.1";
-const char *argp_program_bug_address = "<https://github.com/iovisor/bcc/tree/master/libbpf-tools>";
-static const char argp_doc[] =
+static const char *const usages[] = {
+	"cpuidle [-h] [-i INTERVAL] [-d DURATION] [-T] [-D] [-L LEAST] [-H] [-C] [-c CORE] [-s STATE] [-u] [-m]",
+	NULL,
+};
+
+static const char doc[] =
 "Analyze cpuidle states.\n"
 "\n"
 "USAGE: cpuidle [-h] [-i INTERVAL] [-d DURATION] [-T] [-D] [-L LEAST] [-H] [-C] [-c CORE] [-s STATE] [-u] [-m] \n"
@@ -182,71 +185,36 @@ static const char argp_doc[] =
 "    ./cpuidle -mTd 10       # Show the cpuidle table within 10 second duration\n"
 "    ./cpuidle -uHd 120 -s 8 -c 32 # Show the cpuidle histogram for state 3 and core 5 for 120 seconds\n";
 
-static const struct argp_option opts[] = {
-    { "interval", 'i', "INTERVAL", 0, "summary interval, in seconds", 0 },
-    { "duration", 'd', "DURATION", 0, "total duration of trace, in seconds", 0 },
-    { "table", 'T', 0, 0, "show cpuidle table", 0 },
-    { "dump_overlap", 'D', 0, 0, "dump overlap summary in ftrace", 0 },
-    { "least", 'L', "LEAST", 0, "compute the overlapping duration over the least state", 0 },
-    { "histogram", 'H', 0, 0, "Show histogram", 0 },
-    { "clear", 'C', 0, 0, "clear the screen", 0 },
-    { "core", 'c', "CORE", 0, "Mask of the core contained in the histogram", 0 },
-    { "state", 's', "STATE", 0, "Mask of the state contained in the histogram", 0 },
-    { "microseconds", 'u', 0, 0, "use microsecond as time unit", 0 },
-    { "milliseconds", 'm', 0, 0, "use millisecond as time unit", 0 },
-    { "verbose", 'v', 0, 0, "Verbose debug output", 0 },
-    { NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
-    {},
-};
-
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
+static char *core_mask_str;
+static int cb_core_mask(struct argparse *self, const struct argparse_option *option)
 {
-	char *end;
-	switch (key) {
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case 'i':
-		env.interval = strtof(arg, NULL);
-		break;
-	case 'd':
-		env.duration = strtof(arg, NULL);
-		break;
-	case 'T':
-		env.table = true;
-		break;
-	case 'D':
-		env.dump_overlap = true;
-		break;
-	case 'L':
-		env.least = strtol(arg, NULL, 10);
-		break;
-	case 'H':
-		env.histogram = true;
-		break;
-	case 'C':
-		env.clear = true;
-		break;
-	case 'c':
-		env.core_mask = strtoul(arg, &end, 10);
-		break;
-	case 's':
-		env.state_mask = strtoul(arg, &end, 10);
-		break;
-	case 'u':
-		env.microseconds = true;
-		break;
-	case 'm':
-		env.milliseconds = true;
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
+	env.core_mask = strtoul(core_mask_str, NULL, 10);
 	return 0;
 }
+
+static char *state_mask_str;
+static int cb_state_mask(struct argparse *self, const struct argparse_option *option)
+{
+	env.state_mask = strtoul(state_mask_str, NULL, 10);
+	return 0;
+}
+
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_FLOAT('i', "interval", &env.interval, "summary interval, in seconds", NULL, 0, 0),
+	OPT_FLOAT('d', "duration", &env.duration, "total duration of trace, in seconds", NULL, 0, 0),
+	OPT_BOOLEAN('T', "table", &env.table, "show cpuidle table", NULL, 0, 0),
+	OPT_BOOLEAN('D', "dump_overlap", &env.dump_overlap, "dump overlap summary in ftrace", NULL, 0, 0),
+	OPT_INTEGER('L', "least", &env.least, "compute the overlapping duration over the least state", NULL, 0, 0),
+	OPT_BOOLEAN('H', "histogram", &env.histogram, "Show histogram", NULL, 0, 0),
+	OPT_BOOLEAN('C', "clear", &env.clear, "clear the screen", NULL, 0, 0),
+	OPT_STRING('c', "core", &core_mask_str, "Mask of the core contained in the histogram", cb_core_mask, 0, 0),
+	OPT_STRING('s', "state", &state_mask_str, "Mask of the state contained in the histogram", cb_state_mask, 0, 0),
+	OPT_BOOLEAN('u', "microseconds", &env.microseconds, "use microsecond as time unit", NULL, 0, 0),
+	OPT_BOOLEAN('m', "milliseconds", &env.milliseconds, "use millisecond as time unit", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_END(),
+};
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -335,27 +303,27 @@ static double val_convert(enum FMAT fmat, __u64 lat, __u64 err, __u64 cnt, bool 
 }
 
 static void print_idle_table(enum FMAT fmat, int cpu_num, int state_num,
-			   const char state_names[MAX_IDLE_STATE_NR][32],
-			   struct idle_t percpustate[MAX_IDLE_STATE_NR][MAX_CPU_NR],
-			   double interval)
+		const char state_names[MAX_IDLE_STATE_NR][32],
+		struct idle_t percpustate[MAX_IDLE_STATE_NR][MAX_CPU_NR],
+		double interval)
 {
 	const char *label;
-    switch (fmat) {
-        case LAT: label = "DURATION"; break;
-        case ERR: label = "ERROR"; break;
-        case CNT: label = "COUNT"; break;
-        case AVG: label = "AVERAGE"; break;
-        case PCT: label = "PERCENTAGE"; break;
-        default: return;
-    }
+	switch (fmat) {
+		case LAT: label = "DURATION"; break;
+		case ERR: label = "ERROR"; break;
+		case CNT: label = "COUNT"; break;
+		case AVG: label = "AVERAGE"; break;
+		case PCT: label = "PERCENTAGE"; break;
+		default: return;
+	}
 
-    printf("%20s", label);
-    for (int i = 0; i < cpu_num; i++) {
-        char cpu_str[16];
-        snprintf(cpu_str, sizeof(cpu_str), "CPU%d", i);
-        printf("%15s", cpu_str);
-    }
-    printf("%15s\n", "TOTAL");
+	printf("%20s", label);
+	for (int i = 0; i < cpu_num; i++) {
+		char cpu_str[16];
+		snprintf(cpu_str, sizeof(cpu_str), "CPU%d", i);
+		printf("%15s", cpu_str);
+	}
+	printf("%15s\n", "TOTAL");
 
 	struct idle_t allcpu[MAX_IDLE_STATE_NR] = {};
 	struct idle_t percpu[MAX_CPU_NR] = {};
@@ -400,11 +368,7 @@ static void print_idle_table(enum FMAT fmat, int cpu_num, int state_num,
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_doc,
-	};
+	struct argparse argparse;
 	int err;
 	struct cpuidle_bpf *skel;
 	time_t t;
@@ -413,9 +377,9 @@ int main(int argc, char **argv)
 	double interval_ns = 0;
 	struct timespec start_time, end_time;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, "Analyze cpuidle states.", doc);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
 
 	libbpf_set_print(libbpf_print_fn);
 
@@ -550,7 +514,6 @@ int main(int argc, char **argv)
 				printf("Overlap duration above state %d is %.2f %s.\n\n", env.least, dval, unit);
 			}
 		}
-
 		if (env.histogram) {
 			unsigned int dist[32];
 			int dist_fd = bpf_map__fd(skel->maps.dist);

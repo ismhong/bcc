@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
-#include <argp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +12,7 @@
 #include "rpcdist.h"
 #include "rpcdist.skel.h"
 #include "trace_helpers.h"
+#include "argparse.h"
 
 #define __unused __attribute__((unused))
 
@@ -38,9 +38,12 @@ static struct env {
 
 static volatile bool exiting;
 
-const char *argp_program_version = "rpcdist 0.1";
-const char *argp_program_bug_address = "https://github.com/iovisor/bcc/tree/master/libbpf-tools";
-const char argp_program_doc[] =
+static const char *const usages[] = {
+	"rpcdist [-h] [-T] [-m] [-e] [-a] [-P PROGRAMID] [interval] [count]",
+	NULL,
+};
+
+static const char doc[] =
 "Trace Realtek remote procedure call latency as a histogram.\n"
 "\n"
 "USAGE: rpcdist [-h] [-T] [-m] [-e] [-a] [-P PROGRAMID] [interval] [count]\n"
@@ -53,59 +56,15 @@ const char argp_program_doc[] =
 "    ./rpcdist -e           # show extension summary(total, average)\n"
 "    ./rpcdist -P 201       # trace only AUDIO_SYSTEM\n";
 
-static const struct argp_option opts[] = {
-	{ "timestamp", 'T', NULL, 0, "Include timestamp on output", 0 },
-	{ "milliseconds", 'm', NULL, 0, "Millisecond histogram", 0 },
-	{ "extension", 'e', NULL, 0, "Summarize average/total latency", 0 },
-	{ "append", 'a', NULL, 0, "Append procedureID in histogram key", 0 },
-	{ "programID", 'P', "ID", 0, "Trace only this program ID", 0 },
-	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, ARGP_KEY_FINI, "Show this help message and exit", 0 },
-	{},
-};
-
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	switch (key) {
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case 'T':
-		env.timestamp = true;
-		break;
-	case 'm':
-		env.milliseconds = true;
-		break;
-	case 'e':
-		env.extension = true;
-		break;
-	case 'a':
-		env.append = true;
-		break;
-	case 'P':
-		env.programID = atoi(arg);
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case ARGP_KEY_ARG:
-		if (state->arg_num == 0)
-			env.interval = atoi(arg);
-		else if (state->arg_num == 1)
-			env.count = atoi(arg);
-		else
-			argp_usage(state);
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
-
-static const struct argp argp = {
-	.options = opts,
-	.parser = parse_arg,
-	.doc = argp_program_doc,
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "Include timestamp on output", NULL, 0, 0),
+	OPT_BOOLEAN('m', "milliseconds", &env.milliseconds, "Millisecond histogram", NULL, 0, 0),
+	OPT_BOOLEAN('e', "extension", &env.extension, "Summarize average/total latency", NULL, 0, 0),
+	OPT_BOOLEAN('a', "append", &env.append, "Append procedureID in histogram key", NULL, 0, 0),
+	OPT_INTEGER('P', "programID", &env.programID, "Trace only this program ID", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_END(),
 };
 
 static void sig_handler(int sig)
@@ -579,15 +538,20 @@ static int print_stats(struct rpcdist_bpf *skel, bool use_rpc_mode)
 int main(int argc, char **argv)
 {
 	struct rpcdist_bpf *skel;
+	struct argparse argparse;
 	int err;
 	bool use_rpc_mode = false;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, doc, "\n");
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (argc > 0)
+		env.interval = atoi(argv[0]);
+	if (argc > 1)
+		env.count = atoi(argv[1]);
 
 	libbpf_set_print(libbpf_print_fn);
-
 	if (tracepoint_exists("rtk_rpc", "rtk_rpc_peek_rpc_request") &&
 			tracepoint_exists("rtk_rpc", "rtk_rpc_peek_rpc_reply")) {
 		use_rpc_mode = true;

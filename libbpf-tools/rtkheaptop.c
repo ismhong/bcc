@@ -4,7 +4,7 @@
  *
  * Copyright (c) 2025 Realtek, Inc.
  */
-#include <argp.h>
+#include "argparse.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -100,65 +100,20 @@ static struct env {
 	.count = 99999999,
 };
 
-const char *argp_program_version = "rtkheaptop 0.1";
-const char *argp_program_bug_address = "<msinwu@realtek.com>";
-const char argp_short_opts[] = "hCmMtT:n:c:";
-
-static const struct argp_option opts[] = {
-	{ "noclear", 'C', NULL, 0, "Don't clear the screen", .group = 0 },
-	{ "milliseconds", 'm', NULL, 0, "Millisecond histogram", .group = 0 },
-	{ "timestamp", 'T', NULL, 0, "Include timestamp on output", .group = 0 },
-	{ "heap_name", 'n', "HEAP_NAME", 0, "Trace this heap name only", .group = 0 },
-	{ "task_name", 't', "TASK_NAME", 0, "Trace this task name only", .group = 0 },
-	{ "caller_name", 'c', "CALLER_NAME", 0, "Trace this caller name only", .group = 0 },
-	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show full help", .group = 0 },
-	{ NULL, 0, NULL, 0, NULL, .group = 0 }
+static const char * const usages[] = {
+	"rtkheaptop [options] [interval] [count]",
+	NULL,
 };
 
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	switch (key) {
-	case 'C':
-		env.noclear = true;
-		break;
-	case 'm':
-		env.milliseconds = true;
-		break;
-	case 'T':
-		env.timestamp = true;
-		break;
-	case 'n':
-		env.heap_name = arg;
-		break;
-	case 't':
-		env.task_name = arg;
-		break;
-	case 'c':
-		env.caller_name = arg;
-		break;
-	case ARGP_KEY_ARG:
-		if (state->arg_num == 0)
-			env.interval = atoi(arg);
-		else if (state->arg_num == 1)
-			env.count = atoi(arg);
-		else
-			argp_usage(state);
-		break;
-	case ARGP_KEY_END:
-		if (env.interval == 0)
-			argp_usage(state);
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
-
-static const struct argp argp = {
-	.options = opts,
-	.parser = parse_arg,
-	.doc = "Analysis rtkheap allocation as a table",
-	.args_doc = "[interval] [count]",
+static struct argparse_option options[] = {
+	OPT_BOOLEAN('C', "noclear", &env.noclear, "Don't clear the screen", NULL, 0, 0),
+	OPT_BOOLEAN('m', "milliseconds", &env.milliseconds, "Millisecond histogram", NULL, 0, 0),
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "Include timestamp on output", NULL, 0, 0),
+	OPT_STRING('n', "heap_name", &env.heap_name, "Trace this heap name only", NULL, 0, 0),
+	OPT_STRING('t', "task_name", &env.task_name, "Trace this task name only", NULL, 0, 0),
+	OPT_STRING('c', "caller_name", &env.caller_name, "Trace this caller name only", NULL, 0, 0),
+	OPT_HELP(),
+	OPT_END(),
 };
 
 static const char *get_caller_str(const struct use_heap *key, char *buffer, size_t size)
@@ -376,9 +331,28 @@ int main(int argc, char **argv)
 	struct rtkheaptop_bpf *skel;
 	int err = 0, map_fd;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	struct argparse argparse;
+
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, "Analysis rtkheap allocation as a table.",
+			"Default interval is 1s, default count is infinite.");
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (argc) {
+		if (argc > 2) {
+			warn("Too many arguments\n");
+			argparse_usage(&argparse);
+			return -1;
+		}
+		env.interval = atoi(argv[0]);
+		if (env.interval == 0) {
+			warn("invalid interval\n");
+			argparse_usage(&argparse);
+			return -1;
+		}
+		if (argc > 1)
+			env.count = atoi(argv[1]);
+	}
 
 	signal(SIGINT, sig_handler);
 	signal(SIGTERM, sig_handler);

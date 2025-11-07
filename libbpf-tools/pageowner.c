@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause) */
-#include <argp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +12,7 @@
 #include "pageowner.h"
 #include "pageowner.skel.h"
 #include "trace_helpers.h"
+#include "argparse.h"
 
 static struct env {
 	unsigned long start_pfn;
@@ -28,17 +28,36 @@ static struct env {
 
 static volatile bool exiting;
 
-const char *argp_program_version = "pageowner 0.1";
-const char *argp_program_bug_address = "<https://github.com/iovisor/bcc/tree/master/libbpf-tools>";
-static const struct argp_option opts[] = {
-	{ "start-pfn", 's', "PFN", 0, "Track start page frame number", 0 },
-	{ "end-pfn", 'e', "PFN", 0, "Track end page frame number", 0 },
-	{ "stack-storage-size", 1, "SIZE", 0, "The number of unique stack traces", 0 },
-	{ "timestamp", 'T', NULL, 0, "Include timestamp on output", 0 },
-	{ "interval", 'i', "INTERVAL", 0, "Output interval, in seconds", 0 },
-	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, 0, "Show this help message and exit", 0 },
-	{},
+static char *start_pfn_str;
+static int cb_start_pfn(struct argparse *self, const struct argparse_option *option)
+{
+	env.start_pfn = strtoul(start_pfn_str, NULL, 0);
+	return 0;
+}
+
+static char *end_pfn_str;
+static int cb_end_pfn(struct argparse *self, const struct argparse_option *option)
+{
+	env.end_pfn = strtoul(end_pfn_str, NULL, 0);
+	return 0;
+}
+
+static const char *const usages[] = {
+	"pageowner [-h] [-s PFN] [-e PFN] [--stack-storage-size SIZE] [-T] [-i INTERVAL] [-v]",
+	NULL,
+};
+
+static const char doc[] = "Track who allocated pages.\n\nUSAGE: ./pageowner -s <start_pfn> -e <end_pfn> [-T] [-i interval]\n";
+
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_STRING('s', "start-pfn", &start_pfn_str, "Track start page frame number", cb_start_pfn, 0, 0),
+	OPT_STRING('e', "end-pfn", &end_pfn_str, "Track end page frame number", cb_end_pfn, 0, 0),
+	OPT_INTEGER(0, "stack-storage-size", &env.stack_storage_size, "The number of unique stack traces", NULL, 0, 0),
+	OPT_BOOLEAN('T', "timestamp", &env.timestamp, "Include timestamp on output", NULL, 0, 0),
+	OPT_INTEGER('i', "interval", &env.interval, "Output interval, in seconds", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_END(),
 };
 
 // GFP flags mapping from pageowner.py
@@ -97,39 +116,7 @@ static void gfp_flag_to_name(unsigned int gfp_flag, char *buf, size_t size) {
 	}
 }
 
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	switch (key) {
-	case 's':
-		env.start_pfn = strtoul(arg, NULL, 0);
-		break;
-	case 'e':
-		env.end_pfn = strtoul(arg, NULL, 0);
-		break;
-	case 1: // stack-storage-size
-		env.stack_storage_size = strtol(arg, NULL, 10);
-		break;
-	case 'T':
-		env.timestamp = true;
-		break;
-	case 'i':
-		env.interval = strtol(arg, NULL, 10);
-		if (env.interval <= 0) {
-			fprintf(stderr, "Invalid interval\n");
-			argp_usage(state);
-		}
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
+
 
 static int libbpf_print_fn(enum libbpf_print_level level,
 		const char *format, va_list args)
@@ -250,19 +237,20 @@ static int print_event(struct pageowner_bpf *obj, struct ksyms *ksyms)
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = "Track who allocated pages.\n\nUSAGE: ./pageowner -s <start_pfn> -e <end_pfn> [-T] [-i interval]\n",
-	};
+	struct argparse argparse;
 	struct pageowner_bpf *obj;
 	int err;
 	struct ksyms *ksyms = NULL;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, "Track who allocated pages.", doc);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
 
+	if (env.interval <= 0) {
+		fprintf(stderr, "Invalid interval\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
 	if (env.start_pfn == 0 || env.end_pfn == 0) {
 		fprintf(stderr, "start-pfn and end-pfn must be specified.\n");
 		return 1;

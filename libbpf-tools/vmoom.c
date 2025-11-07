@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
 /* Copyright (c) 2023 Realtek, Inc. */
-#include <argp.h>
+#include "argparse.h"
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -18,6 +18,8 @@
 #include "trace_helpers.h"
 
 #define PERF_BUFFER_PAGES   64
+
+#define warn(...) fprintf(stderr, __VA_ARGS__)
 
 static struct env {
 	bool status;
@@ -49,47 +51,20 @@ const char argp_doc[] =
 "    ./vmoom -m         # also display /proc/PID/maps\n"
 "    ./vmoom -f         # also display low_limit, high_limit, align_mask, align_offset\n";
 
-static const struct argp_option opts[] = {
-	{ "status", 's', 0, 0, "also display /proc/PID/status", 0 },
-	{ "maps", 'm', 0, 0, "also display /proc/PID/maps", 0 },
-	{ "fulldisplay", 'f', 0, 0, "also display low_limit, high_limit, align_mask, align_offset", 0 },
-	{ "duration", 'd', "SECONDS", 0, "total duration of trace in seconds", 0 },
-	{ "verbose", 'v', 0, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, OPTION_HIDDEN, "Show the full help", 0 },
-	{},
+static const char * const usages[] = {
+	"vmoom [-h] [-d DURATION] [-s] [-m] [-f] [-v]",
+	NULL,
 };
 
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	switch (key) {
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case 's':
-		env.status = true;
-		break;
-	case 'm':
-		env.maps = true;
-		break;
-	case 'f':
-		env.fulldisplay = true;
-		break;
-	case 'd':
-		errno = 0;
-		env.duration = strtol(arg, NULL, 10);
-		if (errno || env.duration <= 0) {
-			fprintf(stderr, "Invalid duration: %s\n", arg);
-			argp_usage(state);
-		}
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
+static struct argparse_option options[] = {
+	OPT_BOOLEAN('s', "status", &env.status, "also display /proc/PID/status", NULL, 0, 0),
+	OPT_BOOLEAN('m', "maps", &env.maps, "also display /proc/PID/maps", NULL, 0, 0),
+	OPT_BOOLEAN('f', "fulldisplay", &env.fulldisplay, "also display low_limit, high_limit, align_mask, align_offset", NULL, 0, 0),
+	OPT_INTEGER('d', "duration", &env.duration, "total duration of trace in seconds", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_HELP(),
+	OPT_END(),
+};
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -171,20 +146,27 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 
 int main(int argc, char **argv)
 {
-	static const struct argp argp = {
-		.options = opts,
-		.parser = parse_arg,
-		.doc = argp_doc,
-	};
 	struct ring_buffer *rb = NULL;
 	struct vmoom_bpf *skel;
+	struct argparse argparse;
 	int err;
 	bool use_tp;
 	time_t start_time;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, argp_doc, NULL);
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (env.duration <= 0 && env.duration != 0) {
+		fprintf(stderr, "Invalid duration: %d\n", env.duration);
+		argparse_usage(&argparse);
+		return 1;
+	}
+	if (argc > 0) {
+		warn("unrecognized positional arguments\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
 
 	libbpf_set_print(libbpf_print_fn);
 

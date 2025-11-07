@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
-/* Copyright (c) 2021 Realtek, Inc. */
-#include <argp.h>
+/* Copyright (c) 2025 Realtek, Inc. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +11,7 @@
 #include "rpcsnoop.h"
 #include "rpcsnoop.skel.h"
 #include "trace_helpers.h"
+#include "argparse.h"
 
 #define __unused __attribute__((unused))
 
@@ -27,9 +27,12 @@ static struct env {
 	.verbose = false,
 };
 
-const char *argp_program_version = "rpcsnoop 0.1";
-const char *argp_program_bug_address = "Edward Wu <edward_wu@realtek.com>";
-const char argp_program_doc[] =
+static const char *const usages[] = {
+	"rpcsnoop [-h] [-d DURATION] [-P ID] [-f] [-v]",
+	NULL,
+};
+
+static const char doc[] =
 "Trace Realtek remote procedure call.\n"
 "\n"
 "EXAMPLES:\n"
@@ -38,47 +41,13 @@ const char argp_program_doc[] =
 "    ./rpcsnoop -f        # also display versionID, parameterSize, mycontext\n"
 "    ./rpcsnoop -P 201    # trace only AUDIO_SYSTEM\n";
 
-static const struct argp_option opts[] = {
-	{ "duration", 'd', "SECONDS", 0, "Total duration of trace in seconds", 0 },
-	{ "programID", 'P', "ID", 0, "Trace only this program ID", 0 },
-	{ "fulldisplay", 'f', NULL, 0, "Also display versionID, parameterSize, mycontext", 0 },
-	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0 },
-	{ NULL, 'h', NULL, ARGP_KEY_FINI, "Show this help message and exit", 0 },
-	{},
-};
-
-static error_t parse_arg(int key, char *arg, struct argp_state *state)
-{
-	switch (key) {
-	case 'h':
-		argp_state_help(state, stderr, ARGP_HELP_STD_HELP);
-		break;
-	case 'd':
-		env.duration = atoi(arg);
-		if (env.duration <= 0) {
-			fprintf(stderr, "Invalid duration: %s\n", arg);
-			argp_usage(state);
-		}
-		break;
-	case 'P':
-		env.programID = atoi(arg);
-		break;
-	case 'f':
-		env.fulldisplay = true;
-		break;
-	case 'v':
-		env.verbose = true;
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-	return 0;
-}
-
-static const struct argp argp = {
-	.options = opts,
-	.parser = parse_arg,
-	.doc = argp_program_doc,
+static struct argparse_option options[] = {
+	OPT_HELP(),
+	OPT_INTEGER('d', "duration", &env.duration, "Total duration of trace in seconds", NULL, 0, 0),
+	OPT_INTEGER('P', "programID", &env.programID, "Trace only this program ID", NULL, 0, 0),
+	OPT_BOOLEAN('f', "fulldisplay", &env.fulldisplay, "Also display versionID, parameterSize, mycontext", NULL, 0, 0),
+	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
+	OPT_END(),
 };
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
@@ -420,16 +389,22 @@ int main(int argc, char **argv)
 {
 	struct rpcsnoop_bpf *skel;
 	struct ring_buffer *rb = NULL;
+	struct argparse argparse;
 	int err;
 	bool use_rpc_mode = false;
 	time_t start_ts;
 
-	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if (err)
-		return err;
+	argparse_init(&argparse, options, usages, 0);
+	argparse_describe(&argparse, doc, "\n");
+	argc = argparse_parse(&argparse, argc, (const char **)argv);
+
+	if (env.duration <= 0) {
+		fprintf(stderr, "Invalid duration\n");
+		argparse_usage(&argparse);
+		return 1;
+	}
 
 	libbpf_set_print(libbpf_print_fn);
-
 	if (tracepoint_exists("rtk_rpc", "rtk_rpc_peek_rpc_request") &&
 			tracepoint_exists("rtk_rpc", "rtk_rpc_peek_rpc_reply")) {
 		use_rpc_mode = true;
