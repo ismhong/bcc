@@ -383,6 +383,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "   - CONFIG_PREEMPTIRQ_TRACEPOINTS\n");
         fprintf(stderr, "   - CONFIG_TRACE_PREEMPT_TOGGLE\n");
         fprintf(stderr, "   - CONFIG_TRACE_IRQFLAGS\n");
+        fprintf(stderr, "   - CONFIG_IRQSOFF_TRACER\n");
         fprintf(stderr, "   - CONFIG_DEBUG_PREEMPT\n");
         fprintf(stderr, "Also please disable CONFIG_PROVE_LOCKING and CONFIG_LOCKDEP on older kernels.\n\n");
         goto cleanup;
