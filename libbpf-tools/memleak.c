@@ -864,13 +864,13 @@ int alloc_size_compare(const void *a, const void *b)
 	const struct allocation *x = (struct allocation *)a;
 	const struct allocation *y = (struct allocation *)b;
 
-	// descending order
+	// ascending order
 
 	if (x->size > y->size)
-		return -1;
+		return 1;
 
 	if (x->size < y->size)
-		return 1;
+		return -1;
 
 	return 0;
 }
@@ -978,7 +978,7 @@ int print_outstanding_allocs(int allocs_fd, int stack_traces_fd)
 		nr_allocs++;
 	}
 
-	// sort the allocs array in descending order
+	// sort the allocs array in ascending order
 	qsort(allocs, nr_allocs, sizeof(allocs[0]), alloc_size_compare);
 
 	// get min of allocs we stored vs the top N requested stacks
@@ -987,7 +987,7 @@ int print_outstanding_allocs(int allocs_fd, int stack_traces_fd)
 	printf("[%d:%d:%d] Top %zu stacks with outstanding allocations:\n",
 			tm->tm_hour, tm->tm_min, tm->tm_sec, nr_allocs_to_show);
 
-	print_stack_frames(allocs, nr_allocs_to_show, stack_traces_fd);
+	print_stack_frames(&allocs[nr_allocs - nr_allocs_to_show], nr_allocs_to_show, stack_traces_fd);
 
 	// Reset allocs list so that we dont accidentaly reuse data the next time we call this function
 	for (size_t i = 0; i < nr_allocs; i++) {
@@ -1071,12 +1071,12 @@ int print_outstanding_combined_allocs(int combined_allocs_fd, int stack_traces_f
 	qsort(allocs, nr_allocs, sizeof(allocs[0]), alloc_size_compare);
 
 	// get min of allocs we stored vs the top N requested stacks
-	nr_allocs = nr_allocs < env.top_stacks ? nr_allocs : env.top_stacks;
+	size_t nr_allocs_to_show = nr_allocs < env.top_stacks ? nr_allocs : env.top_stacks;
 
 	printf("[%d:%d:%d] Top %zu stacks with outstanding allocations:\n",
-			tm->tm_hour, tm->tm_min, tm->tm_sec, nr_allocs);
+			tm->tm_hour, tm->tm_min, tm->tm_sec, nr_allocs_to_show);
 
-	print_stack_frames(allocs, nr_allocs, stack_traces_fd);
+	print_stack_frames(&allocs[nr_allocs - nr_allocs_to_show], nr_allocs_to_show, stack_traces_fd);
 
 	if (nr_missing_stacks > 0) {
 		fprintf(stderr, "WARNING: %zu stack traces could not be displayed"
