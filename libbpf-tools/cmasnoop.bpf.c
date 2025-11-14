@@ -116,8 +116,7 @@ cleanup_ringbuf:
 	goto cleanup;
 }
 
-SEC("kprobe/alloc_contig_range")
-int BPF_KPROBE(alloc_contig_range_entry, unsigned long start_pfn, unsigned long end_pfn)
+static int alloc_contig_range_enter(unsigned long start_pfn, unsigned long end_pfn)
 {
 	if (!contig_range)
 		return 0;
@@ -134,8 +133,20 @@ int BPF_KPROBE(alloc_contig_range_entry, unsigned long start_pfn, unsigned long 
 	return 0;
 }
 
-SEC("kretprobe/alloc_contig_range")
-int BPF_KRETPROBE(alloc_contig_range_return, int ret)
+SEC("kprobe/alloc_contig_range")
+int BPF_KPROBE(alloc_contig_range_entry, unsigned long start_pfn, unsigned long end_pfn)
+{
+	return alloc_contig_range_enter(start_pfn, end_pfn);
+}
+
+SEC("kprobe/alloc_contig_range_noprof")
+int BPF_KPROBE(alloc_contig_range_noprof_entry, unsigned long start_pfn,
+                unsigned long end_pfn)
+{
+	return alloc_contig_range_enter(start_pfn, end_pfn);
+}
+
+static int alloc_contig_range_exit(int ret)
 {
 	if (!contig_range)
 		return 0;
@@ -185,6 +196,18 @@ cleanup:
 cleanup_ringbuf:
 	bpf_ringbuf_discard(e, 0);
 	goto cleanup;
+}
+
+SEC("kretprobe/alloc_contig_range")
+int BPF_KRETPROBE(alloc_contig_range_return, int ret)
+{
+	return alloc_contig_range_exit(ret);
+}
+
+SEC("kretprobe/alloc_contig_range_noprof")
+int BPF_KRETPROBE(alloc_contig_range_noprof_return, int ret)
+{
+	return alloc_contig_range_exit(ret);
 }
 
 SEC("tracepoint/cma/cma_release")

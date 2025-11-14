@@ -137,8 +137,7 @@ cleanup:
 	return 0;
 }
 
-SEC("kprobe/alloc_contig_range")
-int BPF_KPROBE(alloc_contig_range_entry, unsigned long start, unsigned long end)
+static int alloc_contig_range_enter(unsigned long start, unsigned long end)
 {
 	if (!range_mode)
 		return 0;
@@ -157,8 +156,20 @@ int BPF_KPROBE(alloc_contig_range_entry, unsigned long start, unsigned long end)
 	return 0;
 }
 
-SEC("kretprobe/alloc_contig_range")
-int BPF_KRETPROBE(alloc_contig_range_return, int ret)
+SEC("kprobe/alloc_contig_range")
+int BPF_KPROBE(alloc_contig_range_entry, unsigned long start, unsigned long end)
+{
+	return alloc_contig_range_enter(start, end);
+}
+
+SEC("kprobe/alloc_contig_range_noprof")
+int BPF_KPROBE(alloc_contig_range_noprof_entry, unsigned long start,
+                unsigned long end)
+{
+	return alloc_contig_range_enter(start, end);
+}
+
+static int alloc_contig_range_exit(int ret)
 {
 	if (!range_mode)
 		return 0;
@@ -203,6 +214,18 @@ int BPF_KRETPROBE(alloc_contig_range_return, int ret)
 cleanup:
 	bpf_map_delete_elem(&start_hash, &pid);
 	return 0;
+}
+
+SEC("kretprobe/alloc_contig_range")
+int BPF_KRETPROBE(alloc_contig_range_return, int ret)
+{
+	return alloc_contig_range_exit(ret);
+}
+
+SEC("kretprobe/alloc_contig_range_noprof")
+int BPF_KRETPROBE(alloc_contig_range_noprof_return, int ret)
+{
+	return alloc_contig_range_exit(ret);
 }
 
 static int trace_release_entry(struct inode *inode)

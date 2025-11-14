@@ -104,27 +104,48 @@ int BPF_KRETPROBE(cma_alloc_return, struct page *ret)
 	return handle_cma_alloc_exit(true, (long)ret);
 }
 
+static int alloc_contig_range_enter(unsigned long start_pfn, unsigned long end_pfn)
+{
+        if (!track_range)
+                return 0;
+
+        u64 pid_tgid = bpf_get_current_pid_tgid();
+        u32 pid = pid_tgid;
+        struct entry_data_t data = {};
+
+        data.ts = bpf_ktime_get_ns();
+        data.count = end_pfn - start_pfn;
+        data.align = 0;
+        bpf_map_update_elem(&start, &pid, &data, BPF_ANY);
+
+        return 0;
+}
+
 SEC("kprobe/alloc_contig_range")
 int BPF_KPROBE(alloc_contig_range_entry, unsigned long start_pfn,
 		unsigned long end_pfn)
 {
-	if (!track_range)
-		return 0;
+	return alloc_contig_range_enter(start_pfn, end_pfn);
+}
 
-	u64 pid_tgid = bpf_get_current_pid_tgid();
-	u32 pid = pid_tgid;
-	struct entry_data_t data = {};
-
-	data.ts = bpf_ktime_get_ns();
-	data.count = end_pfn - start_pfn;
-	data.align = 0;
-	bpf_map_update_elem(&start, &pid, &data, BPF_ANY);
-
-	return 0;
+SEC("kprobe/alloc_contig_range_noprof")
+int BPF_KPROBE(alloc_contig_range_noprof_entry, unsigned long start_pfn,
+                unsigned long end_pfn)
+{
+	return alloc_contig_range_enter(start_pfn, end_pfn);
 }
 
 SEC("kretprobe/alloc_contig_range")
 int BPF_KRETPROBE(alloc_contig_range_return, int ret)
+{
+	if (!track_range)
+		return 0;
+
+	return handle_cma_alloc_exit(false, ret);
+}
+
+SEC("kretprobe/alloc_contig_range_noprof")
+int BPF_KRETPROBE(alloc_contig_range_noprof_return, int ret)
 {
 	if (!track_range)
 		return 0;

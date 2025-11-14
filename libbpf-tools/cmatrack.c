@@ -168,6 +168,14 @@ int main(int argc, char **argv)
 		bpf_program__set_autoload(skel->progs.android_fs_datawrite_start, false);
 	}
 
+	if (kprobe_exists("alloc_contig_range")) {
+		bpf_program__set_autoload(skel->progs.alloc_contig_range_noprof_entry, false);
+		bpf_program__set_autoload(skel->progs.alloc_contig_range_noprof_return, false);
+	} else {
+		bpf_program__set_autoload(skel->progs.alloc_contig_range_entry, false);
+		bpf_program__set_autoload(skel->progs.alloc_contig_range_return, false);
+	}
+
 	err = cmatrack_bpf__load(skel);
 	if (err) {
 		fprintf(stderr, "Failed to load and verify BPF skeleton\n");

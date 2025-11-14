@@ -161,6 +161,13 @@ int main(int argc, char **argv)
 	} else {
 		bpf_program__set_autoload(skel->progs.cma_alloc_entry, false);
 		bpf_program__set_autoload(skel->progs.cma_alloc_return, false);
+		if (kprobe_exists("alloc_contig_range")) {
+			bpf_program__set_autoload(skel->progs.alloc_contig_range_noprof_entry, false);
+			bpf_program__set_autoload(skel->progs.alloc_contig_range_noprof_return, false);
+		} else {
+			bpf_program__set_autoload(skel->progs.alloc_contig_range_entry, false);
+			bpf_program__set_autoload(skel->progs.alloc_contig_range_return, false);
+		}
 	}
 
 	if (!env.addr_range) {

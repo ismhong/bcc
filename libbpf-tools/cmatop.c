@@ -13,6 +13,7 @@
 #include "cmatop.h"
 #include "cmatop.skel.h"
 #include "argparse.h"
+#include "trace_helpers.h"
 
 struct cma_alloc_info {
 	__u64 pages;
@@ -101,6 +102,14 @@ int main(int argc, char **argv)
 		return 1;
 
 	skel->rodata->track_range = env.range;
+
+	if (kprobe_exists("alloc_contig_range")) {
+		bpf_program__set_autoload(skel->progs.alloc_contig_range_noprof_entry, false);
+		bpf_program__set_autoload(skel->progs.alloc_contig_range_noprof_return, false);
+	} else {
+		bpf_program__set_autoload(skel->progs.alloc_contig_range_entry, false);
+		bpf_program__set_autoload(skel->progs.alloc_contig_range_return, false);
+	}
 
 	err = cmatop_bpf__load(skel);
 	if (err) {
