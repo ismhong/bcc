@@ -156,6 +156,8 @@ int main(int argc, char **argv)
 	skel->rodata->has_cma_alloc_finish = tracepoint_exists("cma", "cma_alloc_finish");
 
 	if (!env.contig_range) {
+                bpf_program__set_autoload(skel->progs.alloc_contig_range_noprof_entry, false);
+                bpf_program__set_autoload(skel->progs.alloc_contig_range_noprof_return, false);
 		bpf_program__set_autoload(skel->progs.alloc_contig_range_entry, false);
 		bpf_program__set_autoload(skel->progs.alloc_contig_range_return, false);
 	} else {
