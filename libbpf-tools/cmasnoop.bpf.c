@@ -13,6 +13,16 @@ struct trace_event_raw_cma_alloc {
 	unsigned int count;
 };
 
+struct trace_event_raw_cma_alloc_finish___local {
+	struct trace_entry ent;
+	u32 __data_loc_name;
+	unsigned long pfn;
+	const struct page *page;
+	unsigned long count;
+	unsigned int align;
+	char __data[0];
+};
+
 struct entry_data_t {
 	u64 ts;
 	unsigned long count;
@@ -225,7 +235,7 @@ int cma_release(struct trace_event_raw_cma_release *ctx)
 }
 
 SEC("tracepoint/cma/cma_alloc_finish")
-int cma_alloc_finish(struct trace_event_raw_cma_alloc_finish *ctx)
+int cma_alloc_finish(void *ctx)
 {
 	if (!addr_range)
 		return 0;
@@ -240,7 +250,14 @@ int cma_alloc_finish(struct trace_event_raw_cma_alloc_finish *ctx)
 	entry_data = bpf_map_lookup_elem(&start, &pid);
 	if (!entry_data)
 		return 0;
-	entry_data->pfn = BPF_CORE_READ(ctx, pfn);
+
+	if (bpf_core_type_exists(struct trace_event_raw_cma_alloc_finish)) {
+		struct trace_event_raw_cma_alloc_finish *c = ctx;
+		entry_data->pfn = BPF_CORE_READ(c, pfn);
+	} else {
+		struct trace_event_raw_cma_alloc_finish___local *c = ctx;
+		entry_data->pfn = c->pfn;
+	}
 
 	return 0;
 }
