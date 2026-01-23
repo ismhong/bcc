@@ -8,6 +8,14 @@
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
+struct trace_event_raw_ext4_release_folio___local {
+	struct trace_entry ent;
+	dev_t dev;
+	ino_t ino;
+	unsigned long index;
+	char __data[0];
+};
+
 struct entry_data_t {
 	bool range_mode;
 	union {
@@ -157,8 +165,7 @@ int BPF_KPROBE(alloc_contig_range_entry, unsigned long start, unsigned long end)
 	return 0;
 }
 
-SEC("kretprobe/alloc_contig_range")
-int BPF_KRETPROBE(alloc_contig_range_return, int ret)
+static int alloc_contig_range_exit(int ret)
 {
 	if (!range_mode)
 		return 0;
@@ -205,7 +212,19 @@ cleanup:
 	return 0;
 }
 
-static int trace_release_entry(struct inode *inode)
+SEC("kretprobe/alloc_contig_range")
+int BPF_KRETPROBE(alloc_contig_range_return, int ret)
+{
+	return alloc_contig_range_exit(ret);
+}
+
+SEC("kretprobe/alloc_contig_range_noprof")
+int BPF_KRETPROBE(alloc_contig_range_noprof_return, int ret)
+{
+	return alloc_contig_range_exit(ret);
+}
+
+static int trace_release_entry(struct inode *inode, ino_t i_ino)
 {
 	u64 pid_tgid = bpf_get_current_pid_tgid();
 	u32 pid = pid_tgid;
@@ -219,7 +238,11 @@ static int trace_release_entry(struct inode *inode)
 	struct pid_ino_file_name_t *pid_ino_file_name_p;
 
 	pid_ino_file_key.pid = pid;
-	pid_ino_file_key.ino = BPF_CORE_READ(inode, i_ino);
+	if (inode) {
+		pid_ino_file_key.ino = BPF_CORE_READ(inode, i_ino);
+	} else {
+		pid_ino_file_key.ino = i_ino;
+	}
 
 	pid_ino_file_name_p = bpf_map_lookup_elem(&pid_ino_file_map, &pid_ino_file_key);
 	if (pid_ino_file_name_p == 0) {
@@ -243,27 +266,30 @@ static int trace_release_entry(struct inode *inode)
 SEC("kprobe/f2fs_release_page")
 int BPF_KPROBE(f2fs_release_page_entry, struct page *page, gfp_t gfp)
 {
-	return trace_release_entry(BPF_CORE_READ(page, mapping, host));
+	return trace_release_entry(BPF_CORE_READ(page, mapping, host), 0);
 }
 
 SEC("tp_btf/ext4_releasepage")
 int BPF_PROG(ext4_releasepage, struct page *page, gfp_t gfp)
 {
-	return trace_release_entry(BPF_CORE_READ(page, mapping, host));
+	return trace_release_entry(BPF_CORE_READ(page, mapping, host), 0);
 }
 
-SEC("tp_btf/ext4_release_folio")
-int BPF_PROG(ext4_release_folio, struct folio *folio, gfp_t gfp)
+SEC("tracepoint/ext4/ext4_release_folio")
+int ext4_release_folio(void *ctx)
 {
-	return trace_release_entry(BPF_CORE_READ(&folio->page, mapping, host));
+	struct trace_event_raw_ext4_release_folio___local *c = ctx;
+
+	return trace_release_entry(NULL, c->ino);
 }
 
-SEC("tp_btf/mm_migrate_pages")
-int BPF_PROG(mm_migrate_pages, long succeeded, long failed)
+SEC("tracepoint/migrate/mm_migrate_pages")
+int mm_migrate_pages(void *ctx)
 {
 	u64 pid_tgid = bpf_get_current_pid_tgid();
 	u32 pid = pid_tgid;
 	struct entry_data_t *entry_data;
+	struct trace_event_raw_mm_migrate_pages *c = ctx;
 
 	entry_data = bpf_map_lookup_elem(&start_hash, &pid);
 	if (entry_data == 0)
@@ -280,8 +306,8 @@ int BPF_PROG(mm_migrate_pages, long succeeded, long failed)
 			return 0;
 	}
 
-	__sync_fetch_and_add(&pid_migrate_data_p->succeeded, succeeded);
-	__sync_fetch_and_add(&pid_migrate_data_p->failed, failed);
+	__sync_fetch_and_add(&pid_migrate_data_p->succeeded, c->succeeded);
+	__sync_fetch_and_add(&pid_migrate_data_p->failed, c->failed);
 
 	return 0;
 }
