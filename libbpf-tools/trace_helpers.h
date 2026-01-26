@@ -1,8 +1,10 @@
 /* SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause) */
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /*
  * The libbpf-tools print messages through printf(), which is fully
@@ -18,8 +20,35 @@ static void __attribute__((constructor)) set_stdout_line_buffered(void)
 }
 
 #ifndef NO_PLATFORM_CHECK
-static void __attribute__((constructor)) platform_check(void)
-{
+static int is_being_traced(void) {
+	char buf[4096];
+	int fd;
+	ssize_t n;
+	char *tracer_pid_str;
+
+	fd = open("/proc/self/status", O_RDONLY);
+	if (fd < 0)
+		return 0;
+
+	n = read(fd, buf, sizeof(buf) - 1);
+	close(fd);
+
+	if (n <= 0)
+		return 0;
+
+	buf[n] = '\0';
+	tracer_pid_str = strstr(buf, "TracerPid:");
+	if (tracer_pid_str) {
+		tracer_pid_str += sizeof("TracerPid:") - 1;
+		while (*tracer_pid_str == ' ' || *tracer_pid_str == '\t')
+			tracer_pid_str++;
+		if (atoi(tracer_pid_str) != 0)
+			return 1;
+	}
+	return 0;
+}
+
+static void __attribute__((constructor)) platform_check(void) {
 	const char *soc_files[] = {
 		"/sys/devices/soc0/chip_type",
 		"/sys/devices/soc0/family",
@@ -30,6 +59,11 @@ static void __attribute__((constructor)) platform_check(void)
 	size_t len = 0;
 	FILE *fp;
 	size_t num_files = sizeof(soc_files) / sizeof(soc_files[0]);
+
+	if (is_being_traced()) {
+		fprintf(stderr, "strace/ptrace detected, exiting...\n");
+		exit(1);
+	}
 
 	for (size_t i = 0; i < num_files; i++) {
 		fp = fopen(soc_files[i], "r");
