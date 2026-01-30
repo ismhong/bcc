@@ -95,10 +95,10 @@ static struct argparse_option options[] = {
 	OPT_BOOLEAN('a', "all_files", &env.all_files, "include non-regular file types (sockets, FIFOs, etc)", NULL, 0, 0),
 	OPT_BOOLEAN('C', "noclear", &env.noclear, "don't clear the screen", NULL, 0, 0),
 	OPT_INTEGER('r', "maxrows", &env.maxrows, "maximum rows to print, default 20", NULL, 0, 0),
-	OPT_STRING('s', "sort", &env.sort, "sort column, default all", NULL, 0, 0),
+	OPT_STRING('s', "sort", &env.sort, "sort column, default all {all,reads,writes,rbytes,wbytes}", NULL, 0, 0),
 	OPT_INTEGER('p', "pid", &env.pid, "trace this PID only", NULL, 0, 0),
 	OPT_INTEGER('t', "tid", &env.tid, "trace this TID only", NULL, 0, 0),
-	OPT_STRING('o', "rw_only", &env.rw_only, "trace only reads or writes", NULL, 0, 0),
+	OPT_STRING('o', "rw_only", &env.rw_only, "trace only reads or writes, default all {all,read,write}", NULL, 0, 0),
 	OPT_STRING('f', "fs_type", &env.fs_type, "trace this filesystem type only", NULL, 0, 0),
 	OPT_STRING('d', "dev_name", &env.dev_name, "trace this device name only", NULL, 0, 0),
 	OPT_STRING('m', "mount_point", &env.mount_point, "trace this mount point only", NULL, 0, 0),
@@ -276,7 +276,7 @@ static int print_stat(struct linuxfiletop_bpf *obj)
 			continue;
 
 		const char *dev_name = get_devname_from_sys_block(k.dev_major, k.dev_minor);
-		if (strcmp(env.dev_name, "0") != 0 && strcmp(env.dev_name, dev_name) != 0)
+		if (strcmp(env.dev_name, "0") != 0 && strstr(dev_name, env.dev_name) == 0)
 			continue;
 
 		char name[DNAME_INLINE_LEN];
