@@ -20,10 +20,10 @@
 #define __unused __attribute__((unused))
 
 static struct env {
-	bool fulldisplay;
-	bool timestamp;
-	bool noclear;
-	bool verbose;
+	int fulldisplay;
+	int timestamp;
+	int noclear;
+	int verbose;
 } env = {
 	.fulldisplay = false,
 	.timestamp = false,
@@ -351,7 +351,7 @@ static const char *procedureID_name(__u32 programID, __u32 procedureID, int rpc_
 	return buf;
 }
 
-static volatile bool exiting;
+static volatile int exiting;
 
 static void sig_handler(int sig)
 {

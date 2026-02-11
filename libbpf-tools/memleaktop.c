@@ -26,17 +26,17 @@ struct alloc_info {
 
 static struct env {
 	int interval;
-	bool csv;
+	int csv;
 	pid_t pid;
 	pid_t tid;
 	uint64_t sample_rate;
 	int maxrows;
 	uint64_t min_size;
 	uint64_t max_size;
-	bool extend;
-	bool timestamp;
-	bool verbose;
-	bool wa_missing_free;
+	int extend;
+	int timestamp;
+	int verbose;
+	int wa_missing_free;
 	int map_size;
 } env = {
 	.interval = 30,
@@ -54,7 +54,7 @@ static struct env {
 	.map_size = 500000,
 };
 
-static volatile bool exiting;
+static volatile int exiting;
 
 static char *sample_rate_str;
 static int cb_sample_rate(struct argparse *self, const struct argparse_option *option)

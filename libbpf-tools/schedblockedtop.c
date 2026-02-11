@@ -38,18 +38,18 @@ enum SCALE {
 
 static volatile sig_atomic_t exiting = 0;
 
-static bool clear_screen = true;
+static int clear_screen = true;
 static int output_rows = 40;
 static enum SCALE scale = NSEC;
-static bool per_pid = false;
-static bool io_wait_only = false;
-static bool timestamp = false;
+static int per_pid = false;
+static int io_wait_only = false;
+static int timestamp = false;
 static int interval = 1;
 static int count = 99999999;
-static bool verbose = false;
+static int verbose = false;
 
-static bool microseconds = false;
-static bool milliseconds = false;
+static int microseconds = false;
+static int milliseconds = false;
 
 const char *argp_program_version = "schedblockedtop 0.1";
 const char *argp_program_bug_address =

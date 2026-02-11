@@ -25,9 +25,9 @@
 static struct env {
 	int interval;
 	int maxrows;
-	bool kernel_stacks;
-	bool timestamp;
-	bool verbose;
+	int kernel_stacks;
+	int timestamp;
+	int verbose;
 } env = {
 	.interval = 30,
 	.maxrows = 30,

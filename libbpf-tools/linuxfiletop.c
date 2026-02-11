@@ -45,8 +45,8 @@ struct DName
 
 static struct env
 {
-	bool all_files;
-	bool noclear;
+	int all_files;
+	int noclear;
 	int maxrows;
 	char *sort;
 	pid_t pid;
@@ -57,7 +57,7 @@ static struct env
 	char *mount_point;
 	int interval;
 	int count;
-	bool verbose;
+	int verbose;
 }
  env = {
 	.maxrows = 20,

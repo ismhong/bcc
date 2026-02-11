@@ -20,17 +20,17 @@ struct cma_alloc_info {
 };
 
 static struct env {
-	bool timestamp;
+	int timestamp;
 	int interval;
 	int count;
-	bool range;
-	bool verbose;
+	int range;
+	int verbose;
 } env = {
 	.interval = 99999999,
 	.count = 99999999,
 };
 
-static volatile bool exiting;
+static volatile int exiting;
 
 static const char *const usages[] = {
 	"cmatop [-h] [-T] [-r] [-v] [interval] [count]",

@@ -17,17 +17,17 @@
 
 #define PERF_POLL_TIMEOUT_MS	100
 
-static volatile sig_atomic_t exiting = 0;
+static volatile int exiting = 0;
 
 static struct env {
 	pid_t pid;
 	pid_t tid;
 	int duration;
-	bool timeunit;
+	int timeunit;
 	const char *sort_by;
 	const char *event;
 	const char *mode;
-	bool verbose;
+	int verbose;
 } env = {
 	.pid = INVALID_PID,
 	.tid = INVALID_PID,

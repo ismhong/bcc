@@ -19,11 +19,11 @@
 static struct env {
 	int interval;
 	int duration;
-	bool megabyte;
-	bool timestamp;
+	int megabyte;
+	int timestamp;
 	int top;
 	int count;
-	bool verbose;
+	int verbose;
 } env = {
 	.interval = 0,
 	.duration = 99999999,
@@ -68,7 +68,7 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va
 	return vfprintf(stderr, format, args);
 }
 
-static volatile bool exiting;
+static volatile int exiting;
 
 static void sig_handler(int sig)
 {

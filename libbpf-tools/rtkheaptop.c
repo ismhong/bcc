@@ -20,7 +20,7 @@
 
 #define warn(...) fprintf(stderr, __VA_ARGS__)
 
-static volatile bool exiting = false;
+static volatile int exiting = false;
 
 static void sig_handler(int sig)
 {
@@ -87,9 +87,9 @@ static struct env {
 	const char *heap_name;
 	const char *task_name;
 	const char *caller_name;
-	bool noclear;
-	bool milliseconds;
-	bool timestamp;
+	int noclear;
+	int milliseconds;
+	int timestamp;
 	int interval;
 	int count;
 } env = {

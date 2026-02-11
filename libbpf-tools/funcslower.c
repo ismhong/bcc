@@ -21,18 +21,18 @@
 #define NSEC_PER_SEC 1000000000ULL
 #define PERF_MAX_STACK_DEPTH 127
 
-static volatile sig_atomic_t exiting = 0;
+static volatile int exiting = 0;
 
 static pid_t target_pid = 0;
 static float min_ms = 0;
 static float min_us = 0;
 static int args_count = 0;
-static bool timestamp = false;
-static bool time_sec = false;
-static bool verbose = false;
-static bool folded = false;
-static bool user_stack = false;
-static bool kernel_stack = false;
+static int timestamp = false;
+static int time_sec = false;
+static int verbose = false;
+static int folded = false;
+static int user_stack = false;
+static int kernel_stack = false;
 static char **functions = NULL;
 static int functions_count = 0;
 static struct syms_cache *syms_cache = NULL;

@@ -15,14 +15,14 @@
 #include "trace_helpers.h"
 
 static struct env {
-	bool timestamp;
-	bool verbose;
+	int timestamp;
+	int verbose;
 	int interval;
 } env = {
 	.interval = 1,
 };
 
-static volatile bool exiting;
+static volatile int exiting;
 
 const char *argp_program_version = "whoentersmc 0.1";
 const char *argp_program_bug_address = "<https://github.com/iovisor/bcc/tree/master/libbpf-tools>";

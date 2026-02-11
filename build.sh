@@ -29,5 +29,6 @@ done
 # Change ownership of the output files
 if [ -n "$UID" ] && [ -n "$GID" ]; then
     chown -R "$UID:$GID" /app/out
+    chown -R "$UID:$GID" /app/libbpf-tools/.output
 fi
 

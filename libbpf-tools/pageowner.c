@@ -18,9 +18,9 @@ static struct env {
 	unsigned long start_pfn;
 	unsigned long end_pfn;
 	int stack_storage_size;
-	bool timestamp;
+	int timestamp;
 	int interval;
-	bool verbose;
+	int verbose;
 } env = {
 	.stack_storage_size = 16384,
 	.interval = 1,
