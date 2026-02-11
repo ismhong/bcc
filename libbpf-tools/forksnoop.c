@@ -60,9 +60,9 @@ static struct argparse_option options[] = {
 	OPT_INTEGER('t', "tid", &env.tid, "trace this TID only", NULL, 0, 0),
 	OPT_INTEGER('d', "duration", &env.duration, "total duration of trace, in seconds", NULL, 0, 0),
 	OPT_BOOLEAN('u', "timeunit", &env.timeunit, "set humanable time unit", NULL, 0, 0),
-	OPT_STRING('s', "sort", &env.sort_by, "sort by specific field, default all", NULL, 0, 0),
-	OPT_STRING('e', "event", &env.event, "trace with this event only, default all", NULL, 0, 0),
-	OPT_STRING('m', "mode", &env.mode, "output display mode, default all", NULL, 0, 0),
+	OPT_STRING('s', "sort", &env.sort_by, "sort by specific field, default all {all,fork,execute,exit,rename,duration}", NULL, 0, 0),
+	OPT_STRING('e', "event", &env.event, "trace with this event only, default all {all,fork,exec,exit,rename}", NULL, 0, 0),
+	OPT_STRING('m', "mode", &env.mode, "output display mode, default all {all,snoop,stat}", NULL, 0, 0),
 	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
 	OPT_END(),
 };
