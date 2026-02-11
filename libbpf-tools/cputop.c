@@ -38,6 +38,7 @@ static struct env {
 	.max_rows = 20,
 	.filter_cpu = -1,
 	.filter_tgid = -1,
+	.filter_policy_str = "all",
 	.filter_policy = -1,
 	.interval = 99999999,
 	.count = 99999999,
@@ -68,18 +69,6 @@ static int parse_policy(const char *str) {
 	return -1;
 }
 
-static int parse_policy_callback(struct argparse *self, const struct argparse_option *option)
-{
-	env.filter_policy_str = (char *)self->optvalue;
-	env.filter_policy = parse_policy(self->optvalue);
-	if (env.filter_policy < 0) {
-		fprintf(stderr, "invalid policy: %s\n", self->optvalue);
-		argparse_usage(self);
-		exit(EXIT_FAILURE);
-	}
-	return 0;
-}
-
 static const char * const usages[] = {
 	"cputop [options] [interval] [count]",
 	NULL,
@@ -92,7 +81,7 @@ static struct argparse_option options[] = {
 	OPT_BOOLEAN('n', "name", &env.summarize_by_name, "Use name as key to summarize", NULL, 0, 0),
 	OPT_INTEGER('c', "cpu", &env.filter_cpu, "Trace with this cpu only", NULL, 0, 0),
 	OPT_INTEGER('t', "tgid", &env.filter_tgid, "Trace with this tgid only", NULL, 0, 0),
-	OPT_STRING('p', "sched_policy", NULL, "Trace with this sched policy only, default all", parse_policy_callback, 0, 0),
+	OPT_STRING('p', "sched_policy", &env.filter_policy_str, "Trace with this sched policy only, default all {all,normal,fifo,rr,batch,idle,deadline}", NULL, 0, 0),
 	OPT_BOOLEAN('C', "percpu", &env.per_cpu, "Show each cpu id separately", NULL, 0, 0),
 	OPT_BOOLEAN('E', "extend", &env.extended_stats, "Extend to show context (in)voluntary switches and preempt counts", NULL, 0, 0),
 	OPT_BOOLEAN('v', "verbose", &env.verbose, "Verbose debug output", NULL, 0, 0),
@@ -287,6 +276,13 @@ int main(int argc, char **argv)
 	}
 	if (env.filter_tgid <= 0 && env.filter_tgid != -1) {
 		warn("invalid tgid: %d\n", env.filter_tgid);
+		argparse_usage(&argparse);
+		return 1;
+	}
+
+	env.filter_policy = parse_policy(env.filter_policy_str);
+	if (env.filter_policy < 0 && strcmp(env.filter_policy_str, "all")) {
+		fprintf(stderr, "Invalid policy: %s\n", env.filter_policy_str);
 		argparse_usage(&argparse);
 		return 1;
 	}
