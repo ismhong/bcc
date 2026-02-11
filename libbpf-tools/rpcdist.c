@@ -19,12 +19,12 @@
 static struct env {
 	int interval;
 	int count;
-	bool timestamp;
-	bool milliseconds;
-	bool extension;
-	bool append;
+	int timestamp;
+	int milliseconds;
+	int extension;
+	int append;
 	int programID;
-	bool verbose;
+	int verbose;
 } env = {
 	.interval = 99999999,
 	.count = 99999999,
@@ -36,7 +36,7 @@ static struct env {
 	.verbose = false,
 };
 
-static volatile bool exiting;
+static volatile int exiting;
 
 static const char *const usages[] = {
 	"rpcdist [-h] [-T] [-m] [-e] [-a] [-P PROGRAMID] [interval] [count]",

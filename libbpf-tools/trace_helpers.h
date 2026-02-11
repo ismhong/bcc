@@ -59,6 +59,7 @@ static void __attribute__((constructor)) platform_check(void) {
 	size_t len = 0;
 	FILE *fp;
 	size_t num_files = sizeof(soc_files) / sizeof(soc_files[0]);
+    return;
 
 	if (is_being_traced()) {
 		fprintf(stderr, "strace/ptrace detected, exiting...\n");

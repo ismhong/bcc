@@ -13,16 +13,16 @@ struct idle_t {
 static struct env {
 	float interval;
 	float duration;
-	bool table;
-	bool dump_overlap;
+	int table;
+	int dump_overlap;
 	int least;
-	bool histogram;
-	bool clear;
+	int histogram;
+	int clear;
 	__u32 core_mask;
 	__u32 state_mask;
-	bool microseconds;
-	bool milliseconds;
-	bool verbose;
+	int microseconds;
+	int milliseconds;
+	int verbose;
 } env = {
 	.interval = -1,
 	.duration = -1,

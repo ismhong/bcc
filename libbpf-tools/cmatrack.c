@@ -17,9 +17,9 @@
 #include "argparse.h"
 
 static struct env {
-	bool range;
+	int range;
 	int duration;
-	bool verbose;
+	int verbose;
 } env = {
 	.duration = 0,
 };
@@ -52,7 +52,7 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va
 	return vfprintf(stderr, format, args);
 }
 
-static volatile bool exiting;
+static volatile int exiting;
 
 static void sig_handler(int sig)
 {

@@ -33,9 +33,9 @@ static struct env {
 	pid_t pid;
 	int interval;
 	int count;
-	bool verbose;
-	bool cumulative;
-	bool hex;
+	int verbose;
+	int cumulative;
+	int hex;
 	char *info_func_name;
 	char **histspecs;
 	int hist_count;
@@ -131,7 +131,7 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va
 	return vfprintf(stderr, format, args);
 }
 
-static volatile bool exiting;
+static volatile int exiting;
 
 static void sig_hand(int signr)
 {

@@ -22,21 +22,21 @@ static struct prog_env {
 	int units;
 	unsigned int interval;
 	unsigned int count;
-	bool timestamp;
-	bool avglatency;
-	bool per_command;
-	bool per_blocks;
+	int timestamp;
+	int avglatency;
+	int per_command;
+	int per_blocks;
 	int command;
 	int min_blocks;
 	int max_blocks;
-	bool verbose;
+	int verbose;
 } env = {
 	.units = USEC,
 	.interval = 99999999,
 	.count = 99999999,
 };
 
-static bool milliseconds = false;
+static int milliseconds = false;
 
 const char *argp_program_version = "mmclatency 0.1";
 const char *argp_program_bug_address =

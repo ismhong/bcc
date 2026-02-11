@@ -50,15 +50,15 @@ static struct prog_env {
 	time_t interval;
 	time_t duration;
 	time_t iterations;
-	bool extension;
-	bool timestamp;
-	bool verbose;
+	int extension;
+	int timestamp;
+	int verbose;
 } env = {
 	.interval = 99999999,
 	.iterations = 99999999,
 };
 
-static volatile bool exiting;
+static volatile int exiting;
 
 static const char *const usages[] = {
 	"netaggr [-h] [-i INTERVAL] [-d DURATION] [-e] [-T] [-v]",

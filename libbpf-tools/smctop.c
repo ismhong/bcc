@@ -18,18 +18,18 @@
 #define warn(...) fprintf(stderr, __VA_ARGS__)
 #define OUTPUT_ROWS_LIMIT 10240
 
-static volatile sig_atomic_t exiting = 0;
+static volatile int exiting = 0;
 
-static bool clear_screen = true;
+static int clear_screen = true;
 static int output_rows = 40;
-static bool per_optee_call = false;
-static bool isr_schout_time = false;
-static bool timestamp = false;
+static int per_optee_call = false;
+static int isr_schout_time = false;
+static int timestamp = false;
 static int interval = 1;
 static int count = 99999999;
 static int core = -1;
-static bool ftrace = false;
-static bool verbose = false;
+static int ftrace = false;
+static int verbose = false;
 
 const char *argp_program_version = "smctop 0.1";
 const char *argp_program_bug_address =

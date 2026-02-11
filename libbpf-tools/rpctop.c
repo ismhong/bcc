@@ -22,10 +22,10 @@ static struct env {
 	int count;
 	int programID;
 	int filter_us_latency;
-	bool fulldisplay;
-	bool timestamp;
-	bool noclear;
-	bool verbose;
+	int fulldisplay;
+	int timestamp;
+	int noclear;
+	int verbose;
 } env = {
 	.interval = 1,
 	.count = 99999999,
@@ -374,7 +374,7 @@ static int compare_events(const void *a, const void *b)
 	return 0;
 }
 
-static volatile bool exiting;
+static volatile int exiting;
 
 static void sig_handler(int sig)
 {

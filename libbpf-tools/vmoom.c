@@ -22,11 +22,11 @@
 #define warn(...) fprintf(stderr, __VA_ARGS__)
 
 static struct env {
-	bool status;
-	bool maps;
-	bool fulldisplay;
+	int status;
+	int maps;
+	int fulldisplay;
 	int duration;
-	bool verbose;
+	int verbose;
 } env = {
 	.status = false,
 	.maps = false,
@@ -35,7 +35,7 @@ static struct env {
 	.verbose = false,
 };
 
-static volatile sig_atomic_t exiting;
+static volatile int exiting;
 
 const char *argp_program_version = "vmoom 0.1";
 const char *argp_program_bug_address = "https://github.com/iovisor/bcc/tree/master/libbpf-tools";

@@ -18,8 +18,8 @@
 static struct env {
 	int duration;
 	int programID;
-	bool fulldisplay;
-	bool verbose;
+	int fulldisplay;
+	int verbose;
 } env = {
 	.duration = 0,
 	.programID = 0,

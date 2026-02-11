@@ -18,22 +18,22 @@
 #define OUTPUT_ROWS_LIMIT 10240
 #define warn(...) fprintf(stderr, __VA_ARGS__)
 
-static volatile sig_atomic_t exiting = 0;
+static volatile int exiting = 0;
 
 static struct env {
-	bool timestamp;
-	bool milliseconds;
+	int timestamp;
+	int milliseconds;
 	int max_rows;
-	bool summarize_by_name;
+	int summarize_by_name;
 	int filter_cpu;
 	int filter_tgid;
 	char *filter_policy_str;
 	int filter_policy;
-	bool per_cpu;
-	bool extended_stats;
+	int per_cpu;
+	int extended_stats;
 	long interval;
 	long count;
-	bool verbose;
+	int verbose;
 } env = {
 	.max_rows = 20,
 	.filter_cpu = -1,

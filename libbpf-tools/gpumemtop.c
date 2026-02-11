@@ -19,9 +19,9 @@
 static struct env {
 	int interval;
 	int count;
-	bool timestamp;
-	bool csv;
-	bool verbose;
+	int timestamp;
+	int csv;
+	int verbose;
 } env = {
 	.interval = 99999999,
 	.count = 99999999,
@@ -60,7 +60,7 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va
 	return vfprintf(stderr, format, args);
 }
 
-static volatile bool exiting;
+static volatile int exiting;
 
 static void sig_handler(int sig)
 {

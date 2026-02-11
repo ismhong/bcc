@@ -16,21 +16,21 @@
 #define MAX_ENTRIES 4096
 
 static struct env {
-    _Bool noclear;
+    int noclear;
     int maxrows;
-    _Bool timestamp;
-    _Bool milliseconds;
-    _Bool kilobytes;
-    _Bool megabytes;
-    _Bool per_blocks;
-    _Bool per_pid;
-    _Bool per_cmd_arg;
+    int timestamp;
+    int milliseconds;
+    int kilobytes;
+    int megabytes;
+    int per_blocks;
+    int per_pid;
+    int per_cmd_arg;
     int command;
     int min_blocks;
     int max_blocks;
     int interval;
     int count;
-    _Bool verbose;
+    int verbose;
 } env = {
     .maxrows = MAX_ROWS,
     .command = -1,
@@ -40,7 +40,7 @@ static struct env {
     .count = 99999999,
 };
 
-static volatile _Bool exiting;
+static volatile int exiting;
 
 static const char *const usages[] = {
 	"mmctop [-h] [-C] [-r MAXROWS] [-T] [-m] [-K] [-M] [-B] [-P] [-A] [-c COMMAND] [-z MIN_BLOCKS] [-Z MAX_BLOCKS] [interval] [count]",

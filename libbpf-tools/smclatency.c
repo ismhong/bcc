@@ -23,12 +23,12 @@ static int core = -1;
 static int interval = -1;
 static int duration = -1;
 static int nr_cpus;
-static bool ftrace = false;
-static bool isr_time = false;
-static bool timestamp = false;
-static bool microseconds = false;
-static bool milliseconds = false;
-static bool verbose = false;
+static int ftrace = false;
+static int isr_time = false;
+static int timestamp = false;
+static int microseconds = false;
+static int milliseconds = false;
+static int verbose = false;
 
 const char *argp_program_version = "smclatency 0.1";
 const char *argp_program_bug_address =

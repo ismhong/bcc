@@ -24,9 +24,9 @@
 // ------------------------------------------------------------------
 struct env {
     pid_t pid_filter;
-    bool irq_mode;
-    bool preempt_mode;
-    bool print_timestamp;
+    int irq_mode;
+    int preempt_mode;
+    int print_timestamp;
     int stack_storage_size;
 } env = {
     .pid_filter = 0,
