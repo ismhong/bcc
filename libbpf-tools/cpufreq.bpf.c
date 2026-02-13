@@ -33,7 +33,7 @@ struct {
 		: [max]"i"(UMAX)					\
 	)
 
-SEC("tp_btf/cpu_frequency")
+SEC("raw_tp/cpu_frequency")
 int BPF_PROG(cpu_frequency, unsigned int state, unsigned int cpu_id)
 {
 	if (filter_cg && !bpf_current_task_under_cgroup(&cgroup_map, 0))

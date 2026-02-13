@@ -161,7 +161,7 @@ int sig_trace(struct trace_event_raw_signal_generate *ctx)
 	if (filtered_pid && pid != filtered_pid)
 		return 0;
 
-	get_tcomm(tpid, event.tcomm, sizeof(event.tcomm));
+	bpf_probe_read_kernel_str(event.tcomm, sizeof(event.tcomm), ctx->comm);
 
 	event.pid = pid;
 	event.tpid = tpid;

@@ -43,7 +43,7 @@ static int offcpu_sched_switch(struct task_struct *prev)
 	if (targ_pid && targ_pid != pid)
 		return 0;
 
-	if (user_threads_only && prev->flags & PF_KTHREAD)
+	if (user_threads_only && (BPF_CORE_READ(prev, flags) & PF_KTHREAD))
 		return 0;
 
 	ts = bpf_ktime_get_ns();
@@ -53,8 +53,8 @@ static int offcpu_sched_switch(struct task_struct *prev)
 
 static int wakeup(void *ctx, struct task_struct *p)
 {
-	u32 pid = p->tgid;
-	u32 tid = p->pid;
+	u32 pid = BPF_CORE_READ(p, tgid);
+	u32 tid = BPF_CORE_READ(p, pid);
 	u64 delta, *count_key, *tsp;
 	static const u64 zero;
 	struct key_t key = {};
@@ -71,7 +71,7 @@ static int wakeup(void *ctx, struct task_struct *p)
 		return 0;
 
 	key.w_k_stack_id = bpf_get_stackid(ctx, &stackmap, 0);
-	bpf_probe_read_kernel(&key.target, sizeof(key.target), p->comm);
+	BPF_CORE_READ_STR_INTO(&key.target, p, comm);
 	bpf_get_current_comm(&key.waker, sizeof(key.waker));
 
 	count_key = bpf_map_lookup_or_try_init(&counts, &key, &zero);
@@ -82,13 +82,13 @@ static int wakeup(void *ctx, struct task_struct *p)
 }
 
 
-SEC("tp_btf/sched_switch")
+SEC("raw_tp/sched_switch")
 int BPF_PROG(sched_switch, bool preempt, struct task_struct *prev, struct task_struct *next)
 {
 	return offcpu_sched_switch(prev);
 }
 
-SEC("tp_btf/sched_wakeup")
+SEC("raw_tp/sched_wakeup")
 int BPF_PROG(sched_wakeup, struct task_struct *p)
 {
 	return wakeup(ctx, p);

@@ -142,13 +142,13 @@ int BPF_KPROBE(__blk_account_io_done, struct request *req)
 	return trace_done(req);
 }
 
-SEC("tp_btf/block_io_start")
+SEC("raw_tp/block_io_start")
 int BPF_PROG(block_io_start, struct request *req)
 {
 	return trace_start(req);
 }
 
-SEC("tp_btf/block_io_done")
+SEC("raw_tp/block_io_done")
 int BPF_PROG(block_io_done, struct request *req)
 {
 	return trace_done(req);
