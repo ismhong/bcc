@@ -199,6 +199,7 @@ int main(int argc, char **argv)
 	obj->rodata->targ_sport = env.lport;
 	obj->rodata->targ_dport = env.rport;
 	obj->rodata->targ_min_us = env.min_us;
+	obj->rodata->targ_has_sock_cookie = libbpf_probe_bpf_helper(BPF_PROG_TYPE_RAW_TRACEPOINT, BPF_FUNC_get_socket_cookie, NULL) > 0;
 
 	buf = bpf_buffer__new(obj->maps.events, obj->maps.heap);
 	if (!buf) {
@@ -219,7 +220,7 @@ int main(int argc, char **argv)
 
 	err = tcppktlat_bpf__load(obj);
 	if (err) {
-		fprintf(stderr, "failed to load BPF object: %d, maybe your kernel doesn't support `bpf_get_socket_cookie`\n", err);
+		fprintf(stderr, "failed to load BPF object: %d\n", err);
 		goto cleanup;
 	}
 

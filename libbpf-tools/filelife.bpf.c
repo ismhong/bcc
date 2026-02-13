@@ -52,7 +52,7 @@ probe_create(struct dentry *dentry)
 	if (targ_tgid && targ_tgid != tgid)
 		return 0;
 
-	task = (struct task_struct *)bpf_get_current_task_btf();
+	task = (struct task_struct *)bpf_get_current_task();
 
 	arg.ts = bpf_ktime_get_ns();
 	arg.cwd_vfsmnt = BPF_CORE_READ(task, fs, pwd.mnt);

@@ -243,6 +243,11 @@ static __always_inline bool has_kmem_alloc(void)
  */
 static __always_inline __u64 get_sock_ident(struct sock *sk)
 {
+	extern const volatile bool targ_has_sock_cookie __attribute__((weak));
+
+	if (&targ_has_sock_cookie && !targ_has_sock_cookie)
+		return (__u64)sk;
+
 	if (bpf_core_enum_value_exists(enum bpf_func_id, BPF_FUNC_check_mtu)) {
 		return bpf_get_socket_cookie(sk);
 	}

@@ -60,7 +60,7 @@ static int trace_rq_issue(struct request *rq)
 		if (!histp)
 			return 0;
 	}
-	slot = log2l(rq->__data_len / 1024);
+	slot = log2l(BPF_CORE_READ(rq, __data_len) / 1024);
 	if (slot >= MAX_SLOTS)
 		slot = MAX_SLOTS - 1;
 	__sync_fetch_and_add(&histp->slots[slot], 1);
@@ -68,7 +68,7 @@ static int trace_rq_issue(struct request *rq)
 	return 0;
 }
 
-SEC("tp_btf/block_rq_issue")
+SEC("raw_tp/block_rq_issue")
 int BPF_PROG(block_rq_issue)
 {
 	/**

@@ -10,6 +10,8 @@
 #include <argp.h>
 #include <libgen.h>
 #include <signal.h>
+#include <stdio.h>
+#include <string.h>
 #include <time.h>
 
 #include <bpf/bpf.h>
@@ -213,10 +215,30 @@ static void sig_int(int signo)
 	exiting = 1;
 }
 
+static void get_tcomm_from_proc(pid_t pid, char *comm, size_t size)
+{
+	char path[32];
+	FILE *f;
+
+	snprintf(path, sizeof(path), "/proc/%d/comm", pid);
+	f = fopen(path, "r");
+	if (!f)
+		return;
+	if (fgets(comm, size, f)) {
+		size_t len = strlen(comm);
+		if (len > 0 && comm[len - 1] == '\n')
+			comm[len - 1] = '\0';
+	}
+	fclose(f);
+}
+
 static void handle_event(void *ctx, int cpu, void *data, __u32 data_sz)
 {
 	struct event *e = data;
 	char ts[32];
+
+	if (strcmp(e->tcomm, "N/A") == 0)
+		get_tcomm_from_proc(e->tpid, e->tcomm, sizeof(e->tcomm));
 
 	str_timestamp("%H:%M:%S", ts, sizeof(ts));
 	if (signal_name && e->sig < ARRAY_SIZE(sig_name))
@@ -297,8 +319,8 @@ int main(int argc, char **argv)
 	}
 
 	if (!support_bpf_task_from_pid())
-		fprintf(stderr, "WARNING: Current kernel not support "\
-				"bpf_task_from_pid(), ignore TCOMM field\n");
+		fprintf(stderr, "WARNING: Current kernel does not support " \
+				"bpf_task_from_pid(), falling back to /proc\n");
 
 	printf("%-8s %-7s %-16s %-12s %-7s %-16s %-6s\n",
 	       "TIME", "PID", "COMM", "SIG", "TPID", "TCOMM", "RESULT");

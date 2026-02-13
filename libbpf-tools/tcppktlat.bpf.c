@@ -11,12 +11,14 @@
 
 #define MAX_ENTRIES	10240
 #define AF_INET		2
+#define AF_INET6	10
 
 const volatile pid_t targ_pid = 0;
 const volatile pid_t targ_tid = 0;
 const volatile __u16 targ_sport = 0;
 const volatile __u16 targ_dport = 0;
 const volatile __u64 targ_min_us = 0;
+const volatile bool targ_has_sock_cookie = true;
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -74,6 +76,7 @@ static int handle_tcp_rcv_space_adjust(void *ctx, struct sock *sk)
 	if (!eventp)
 		goto cleanup;
 
+	__builtin_memset(eventp, 0, sizeof(*eventp));
 	eventp->pid = pid;
 	eventp->tid = tid;
 	eventp->delta_us = delta_us;
@@ -81,14 +84,14 @@ static int handle_tcp_rcv_space_adjust(void *ctx, struct sock *sk)
 	eventp->dport = BPF_CORE_READ(sk, __sk_common.skc_dport);
 	bpf_get_current_comm(&eventp->comm, TASK_COMM_LEN);
 	family = BPF_CORE_READ(sk, __sk_common.skc_family);
-	if (family == AF_INET) {
-		eventp->saddr[0] = BPF_CORE_READ(sk, __sk_common.skc_rcv_saddr);
-		eventp->daddr[0] = BPF_CORE_READ(sk, __sk_common.skc_daddr);
-	} else { /* family == AF_INET6 */
-		BPF_CORE_READ_INTO(eventp->saddr, sk, __sk_common.skc_v6_rcv_saddr.in6_u.u6_addr32);
-		BPF_CORE_READ_INTO(eventp->daddr, sk, __sk_common.skc_v6_daddr.in6_u.u6_addr32);
-	}
 	eventp->family = family;
+	if (family == AF_INET) {
+		BPF_CORE_READ_INTO(&eventp->saddr[0], sk, __sk_common.skc_rcv_saddr);
+		BPF_CORE_READ_INTO(&eventp->daddr[0], sk, __sk_common.skc_daddr);
+	} else if (family == AF_INET6) {
+		BPF_CORE_READ_INTO(eventp->saddr, sk, __sk_common.skc_v6_rcv_saddr);
+		BPF_CORE_READ_INTO(eventp->daddr, sk, __sk_common.skc_v6_daddr);
+	}
 	submit_buf(ctx, eventp, sizeof(*eventp));
 
 cleanup:
@@ -104,19 +107,19 @@ static int handle_tcp_destroy_sock(void *ctx, struct sock *sk)
 	return 0;
 }
 
-SEC("tp_btf/tcp_probe")
+SEC("raw_tp/tcp_probe")
 int BPF_PROG(tcp_probe_btf, struct sock *sk, struct sk_buff *skb)
 {
 	return handle_tcp_probe(sk, skb);
 }
 
-SEC("tp_btf/tcp_rcv_space_adjust")
+SEC("raw_tp/tcp_rcv_space_adjust")
 int BPF_PROG(tcp_rcv_space_adjust_btf, struct sock *sk)
 {
 	return handle_tcp_rcv_space_adjust(ctx, sk);
 }
 
-SEC("tp_btf/tcp_destroy_sock")
+SEC("raw_tp/tcp_destroy_sock")
 int BPF_PROG(tcp_destroy_sock_btf, struct sock *sk)
 {
 	return handle_tcp_destroy_sock(ctx, sk);
