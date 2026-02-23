@@ -76,34 +76,26 @@ static void sig_handler(int sig)
 	exiting = true;
 }
 
-static int readahead__set_attach_target(struct bpf_program *prog)
+static const char *readahead_func_name(void)
 {
-	int err;
-
 	/*
 	 * 56a4d67c264e ("mm/readahead: Switch to page_cache_ra_order") in v5.18
 	 * renamed do_page_cache_ra to page_cache_ra_order
 	 */
-	err = bpf_program__set_attach_target(prog, 0, "page_cache_ra_order");
-	if (!err)
-		return 0;
+	if (kprobe_exists("page_cache_ra_order"))
+		return "page_cache_ra_order";
 
 	/*
 	 * 8238287eadb2 ("mm/readahead: make do_page_cache_ra take a readahead_control")
 	 * in v5.10 renamed __do_page_cache_readahead to do_page_cache_ra
 	*/
-	err = bpf_program__set_attach_target(prog, 0, "do_page_cache_ra");
-	if (!err)
-		return 0;
+	if (kprobe_exists("do_page_cache_ra"))
+		return "do_page_cache_ra";
 
-	err = bpf_program__set_attach_target(prog, 0,
-					"__do_page_cache_readahead");
-	if (!err)
-		return 0;
+	if (kprobe_exists("__do_page_cache_readahead"))
+		return "__do_page_cache_readahead";
 
-	fprintf(stderr, "failed to set attach target for %s: %s\n",
-		bpf_program__name(prog), strerror(-err));
-	return err;
+	return NULL;
 }
 
 static int attach_access(struct readahead_bpf *obj)
@@ -115,10 +107,10 @@ static int attach_access(struct readahead_bpf *obj)
 	 * 76580b65 ("mm/swap: Add folio_mark_accessed()") in v5.15
 	 * convert mark_page_accessed() to folio_mark_accessed().
 	 */
-	if (fentry_can_attach("folio_mark_accessed", NULL))
+	if (kprobe_exists("folio_mark_accessed"))
 		return bpf_program__set_autoload(obj->progs.folio_mark_accessed, true);
 
-	if (fentry_can_attach("mark_page_accessed", NULL))
+	if (kprobe_exists("mark_page_accessed"))
 		return bpf_program__set_autoload(obj->progs.mark_page_accessed, true);
 
 	fprintf(stderr, "failed to attach to access functions\n");
@@ -130,23 +122,27 @@ static int attach_alloc_ret(struct readahead_bpf *obj)
 	bpf_program__set_autoload(obj->progs.page_cache_alloc_ret, false);
 	bpf_program__set_autoload(obj->progs.filemap_alloc_folio_ret, false);
 	bpf_program__set_autoload(obj->progs.filemap_alloc_folio_noprof_ret, false);
+	bpf_program__set_autoload(obj->progs.filemap_add_folio, false);
 
 	/*
 	 * b951aaff5035 ("mm: enable page allocation tagging") in v6.10
 	 * renamed filemap_alloc_folio to filemap_alloc_folio_noprof
 	 */
-	if (fentry_can_attach("filemap_alloc_folio_noprof", NULL))
+	if (kprobe_exists("filemap_alloc_folio_noprof"))
 		return bpf_program__set_autoload(obj->progs.filemap_alloc_folio_noprof_ret, true);
 
 	/*
 	 * bb3c579e25e5 ("mm/filemap: Add filemap_alloc_folio") in v5.16
 	 * changed __page_cache_alloc to be a wrapper of filemap_alloc_folio
 	 */
-	if (fentry_can_attach("filemap_alloc_folio", NULL))
+	if (kprobe_exists("filemap_alloc_folio"))
 		return bpf_program__set_autoload(obj->progs.filemap_alloc_folio_ret, true);
 
-	if (fentry_can_attach("__page_cache_alloc", NULL))
+	if (kprobe_exists("__page_cache_alloc"))
 		return bpf_program__set_autoload(obj->progs.page_cache_alloc_ret, true);
+
+	if (kprobe_exists("filemap_add_folio"))
+		return bpf_program__set_autoload(obj->progs.filemap_add_folio, true);
 
 	fprintf(stderr, "failed to attach to alloc functions\n");
 	return -1;
@@ -161,6 +157,7 @@ int main(int argc, char **argv)
 	};
 	struct readahead_bpf *obj;
 	struct hist *histp;
+	const char *ra_name;
 	int err;
 
 	err = argp_parse(&argp, argc, argv, 0, NULL, NULL);
@@ -175,18 +172,17 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	err = attach_access(obj);
-	if (err)
+	ra_name = readahead_func_name();
+	if (!ra_name) {
+		fprintf(stderr, "failed to find readahead function\n");
 		goto cleanup;
-	err = attach_alloc_ret(obj);
-	if (err)
+	}
+
+	if (attach_access(obj) || attach_alloc_ret(obj))
 		goto cleanup;
-	err = readahead__set_attach_target(obj->progs.do_page_cache_ra);
-	if (err)
-		goto cleanup;
-	err = readahead__set_attach_target(obj->progs.do_page_cache_ra_ret);
-	if (err)
-		goto cleanup;
+
+	bpf_program__set_autoattach(obj->progs.do_page_cache_ra, false);
+	bpf_program__set_autoattach(obj->progs.do_page_cache_ra_ret, false);
 
 	err = readahead_bpf__load(obj);
 	if (err) {
@@ -200,6 +196,12 @@ int main(int argc, char **argv)
 	}
 
 	err = readahead_bpf__attach(obj);
+	if (!err) {
+		obj->links.do_page_cache_ra = bpf_program__attach_kprobe(obj->progs.do_page_cache_ra, false, ra_name);
+		obj->links.do_page_cache_ra_ret = bpf_program__attach_kprobe(obj->progs.do_page_cache_ra_ret, true, ra_name);
+		if (!obj->links.do_page_cache_ra || !obj->links.do_page_cache_ra_ret)
+			err = -1;
+	}
 	if (err) {
 		fprintf(stderr, "failed to attach BPF programs\n");
 		goto cleanup;
