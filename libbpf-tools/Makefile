@@ -160,6 +160,9 @@ ifeq ($(USE_BLAZESYM),1)
 LDFLAGS += $(OUTPUT)/libblazesym.a -lrt -lpthread -ldl
 endif
 
+# For load custom BTF file, wrap original btf__load_vmlinux_btf to our own
+LDFLAGS += -Wl,--wrap=btf__load_vmlinux_btf
+
 .PHONY: clean
 clean:
 	$(call msg,CLEAN)
