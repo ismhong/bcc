@@ -1355,3 +1355,30 @@ int str_timestamp(const char *format, char *buf, size_t buf_len)
 		return -errno;
 	return strftime(buf, buf_len, format, tm);
 }
+
+extern struct btf *__real_btf__load_vmlinux_btf(void);
+
+struct btf *__wrap_btf__load_vmlinux_btf(void)
+{
+	struct btf *btf;
+	const char *path;
+
+	/* 1. Check LIBBPF_VMLINUX_BTF env first */
+	path = getenv("LIBBPF_VMLINUX_BTF");
+	if (path) {
+		fprintf(stdout, "Loading custom BTF from %s (LIBBPF_VMLINUX_BTF)...\n", path);
+		return btf__parse(path, NULL);
+	}
+
+	/* 2. If env not present, try to load kernel BTF */
+	btf = __real_btf__load_vmlinux_btf();
+
+	/* 3. If kernel BTF failed, show guidance message */
+	if (libbpf_get_error(btf)) {
+		fprintf(stderr, "Error: Kernel BTF not found. If your kernel doesn't support BTF,\n"
+				"you can provide a custom BTF file path via LIBBPF_VMLINUX_BTF env var.\n"
+				"Example: export LIBBPF_VMLINUX_BTF=/path/to/vmlinux\n");
+	}
+
+	return btf;
+}

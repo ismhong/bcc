@@ -10,7 +10,7 @@ LIBBPF_OBJ := $(abspath $(OUTPUT)/libbpf.a)
 LIBBLAZESYM_SRC := $(abspath blazesym/target/release/libblazesym.a)
 INCLUDES := -I$(OUTPUT) -I../src/cc/libbpf/include/uapi
 CFLAGS := -g -O2 -Wall -Wmissing-field-initializers -Werror -Werror=undef
-LDFLAGS += -static -largp -lz -lzstd
+LDFLAGS += -static -largp -lz -lzstd -Wl,--wrap=btf__load_vmlinux_btf
 BPFCFLAGS := -g -O2 -Wall -Werror=undef
 BPFCFLAGS_softirqs := $(BPFCFLAGS) -mcpu=v3
 INSTALL ?= install
