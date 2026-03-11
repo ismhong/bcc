@@ -286,6 +286,7 @@ cleanup:
 	perf_buffer__free(pb);
 	bindsnoop_bpf__destroy(obj);
 	cleanup_core_btf(&open_opts);
+	free(target_ports);
 	if (cgfd > 0)
 		close(cgfd);
 

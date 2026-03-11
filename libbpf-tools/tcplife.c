@@ -247,5 +247,7 @@ cleanup:
 	perf_buffer__free(pb);
 	tcplife_bpf__destroy(obj);
 	cleanup_core_btf(&open_opts);
+	free(target_sports);
+	free(target_dports);
 	return err != 0;
 }
