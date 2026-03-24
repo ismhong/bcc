@@ -93,7 +93,6 @@ static int rtk_heap_pool_allocate_end(struct pt_regs *ctx)
 
 	struct use_heap heap_key = {};
 	heap_key.tgid = pid_tgid >> 32;
-	heap_key.pid = pid;
 	heap_key.flags = alloc_info_p->flags;
 	bpf_probe_read_kernel_str(heap_key.name, sizeof(heap_key.name), alloc_info_p->name);
 	bpf_probe_read_kernel_str(heap_key.caller, sizeof(heap_key.caller), alloc_info_p->caller);

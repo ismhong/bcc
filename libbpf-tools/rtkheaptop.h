@@ -12,7 +12,6 @@
 
 struct use_heap {
 	__u32 tgid;
-	__u32 pid;
 	unsigned long flags;
 	char name[HEAP_MAX_NAME];
 	char comm[TASK_COMM_LEN];
