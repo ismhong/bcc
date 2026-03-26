@@ -309,8 +309,7 @@ static void parse_heap_summary()
 				warn("Failed to allocate memory for heap_summary_entry\n");
 				break;
 			}
-			strncpy(entry->name, heap_name, sizeof(entry->name) - 1);
-			entry->name[sizeof(entry->name) - 1] = '\0';
+			snprintf(entry->name, sizeof(entry->name), "%s", heap_name);
 			simple_list_add_tail(&entry->list, &heap_summary_list);
 		} else {
 			if (!simple_list_empty(&heap_summary_list)) {
@@ -344,9 +343,7 @@ static struct rtk_heap_info *parse_procfs_heap_line(char *s, bool is_cma)
 	char *name_end = name_start;
 	while (*name_end && *name_end != ' ' && *name_end != '\t' && *name_end != '[' && *name_end != ':') name_end++;
 	int name_len = name_end - name_start;
-	if (name_len >= HEAP_MAX_NAME) name_len = HEAP_MAX_NAME - 1;
-	strncpy(raw_name, name_start, name_len);
-	raw_name[name_len] = '\0';
+	snprintf(raw_name, sizeof(raw_name), "%.*s", name_len, name_start);
 
 	if (env.heap_name[0] != '0' && strstr(raw_name, env.heap_name) == NULL)
 		return NULL;
@@ -366,8 +363,8 @@ static struct rtk_heap_info *parse_procfs_heap_line(char *s, bool is_cma)
 	struct rtk_heap_info *heap = calloc(1, sizeof(*heap));
 	if (!heap) return NULL;
 
-	strncpy(heap->raw_heap_name, raw_name, sizeof(heap->raw_heap_name) - 1);
-	strncpy(heap->heap_name, map_heap_name(raw_name), sizeof(heap->heap_name) - 1);
+	snprintf(heap->raw_heap_name, sizeof(heap->raw_heap_name), "%s", raw_name);
+	snprintf(heap->heap_name, sizeof(heap->heap_name), "%s", map_heap_name(raw_name));
 	if (is_cma) {
 		heap->count_cma = size_pages;
 	} else {
@@ -420,8 +417,7 @@ static void parse_procfs_task_line(struct rtk_heap_info *heap, char *s)
 
 	char comm[TASK_COMM_LEN] = {0};
 	int len = colon_ptr - s;
-	if (len >= TASK_COMM_LEN) len = TASK_COMM_LEN - 1;
-	strncpy(comm, s, len);
+	snprintf(comm, sizeof(comm), "%.*s", len, s);
 
 	// Trim comm
 	char *c_start = comm;
@@ -442,7 +438,7 @@ static void parse_procfs_task_line(struct rtk_heap_info *heap, char *s)
 	if (!task) {
 		task = calloc(1, sizeof(*task));
 		if (task) {
-			strncpy(task->comm, c_start, sizeof(task->comm) - 1);
+			snprintf(task->comm, sizeof(task->comm), "%s", c_start);
 			simple_list_add_tail(&task->list, &heap->task_list);
 		}
 	}
@@ -513,8 +509,8 @@ static bool dump_rtkheap_info(const char *entry_name)
 		warn("Failed to allocate memory for rtk_heap_info\n");
 		return false;
 	}
-	strncpy(heap_info->raw_heap_name, entry_name, sizeof(heap_info->raw_heap_name) - 1);
-	strncpy(heap_info->heap_name, entry_name, sizeof(heap_info->heap_name) - 1);
+	snprintf(heap_info->raw_heap_name, sizeof(heap_info->raw_heap_name), "%s", entry_name);
+	snprintf(heap_info->heap_name, sizeof(heap_info->heap_name), "%s", entry_name);
 	simple_init_list_head(&heap_info->task_list);
 	simple_list_add_tail(&heap_info->list, &rtk_heap_info_list);
 
@@ -560,8 +556,7 @@ static bool dump_rtkheap_info(const char *entry_name)
 	if (f) {
 		while (fgets(line, sizeof(line), f)) {
 			if (strstr(line, "flags :")) {
-				strncpy(heap_info->flag_line, line, sizeof(heap_info->flag_line) - 1);
-				heap_info->flag_line[sizeof(heap_info->flag_line) - 1] = '\0';
+				snprintf(heap_info->flag_line, sizeof(heap_info->flag_line), "%s", line);
 				break;
 			}
 		}
@@ -598,9 +593,8 @@ static bool dump_rtkheap_info(const char *entry_name)
 					warn("Failed to allocate memory for task_info\n");
 					break;
 				}
-			strncpy(task->comm, comm_name, sizeof(task->comm) - 1);
-			task->comm[sizeof(task->comm) - 1] = '\0';
-			task->used_pages = value / BYTES_TO_PAGES;
+				snprintf(task->comm, sizeof(task->comm), "%s", comm_name);
+				task->used_pages = value / BYTES_TO_PAGES;
 			simple_list_add_tail(&task->list, &heap_info->task_list);
 			}
 		}
@@ -671,8 +665,7 @@ static void print_stat_row(const char *comm, const char *used_pages_str, const c
 static void print_rtk_heap_stats(struct rtk_heap_info *h_info, struct bpf_map_entry *map_entries, int num_map_entries, bool rtk_dev_enabled, bool use_procfs)
 {
 	char flags_stripped[256];
-	strncpy(flags_stripped, h_info->flag_line, sizeof(flags_stripped) - 1);
-	flags_stripped[sizeof(flags_stripped) - 1] = '\0';
+	snprintf(flags_stripped, sizeof(flags_stripped), "%s", h_info->flag_line);
 	char *nl = strpbrk(flags_stripped, "\n\r");
 	if (nl) *nl = '\0';
 
@@ -713,8 +706,7 @@ static void print_rtk_heap_stats(struct rtk_heap_info *h_info, struct bpf_map_en
 		if (map_entries) {
 			for (int i = 0; i < num_map_entries; i++) {
 				char heap_dev_name_stripped[HEAP_MAX_NAME];
-				strncpy(heap_dev_name_stripped, map_entries[i].key.name, sizeof(heap_dev_name_stripped));
-				heap_dev_name_stripped[sizeof(heap_dev_name_stripped) - 1] = '\0';
+				snprintf(heap_dev_name_stripped, sizeof(heap_dev_name_stripped), "%s", map_entries[i].key.name);
 				char *uncached = strstr(heap_dev_name_stripped, "_uncached");
 				if (uncached) *uncached = '\0';
 
@@ -756,8 +748,7 @@ static void print_rtk_heap_stats(struct rtk_heap_info *h_info, struct bpf_map_en
 				continue;
 
 			char heap_dev_name_stripped[HEAP_MAX_NAME];
-			strncpy(heap_dev_name_stripped, map_entries[i].key.name, sizeof(heap_dev_name_stripped));
-			heap_dev_name_stripped[sizeof(heap_dev_name_stripped) - 1] = '\0';
+			snprintf(heap_dev_name_stripped, sizeof(heap_dev_name_stripped), "%s", map_entries[i].key.name);
 			char *uncached = strstr(heap_dev_name_stripped, "_uncached");
 			if (uncached) *uncached = '\0';
 
@@ -787,7 +778,7 @@ static void print_rtk_heap_stats(struct rtk_heap_info *h_info, struct bpf_map_en
 					&map_entries[i], rtk_dev_enabled);
 
 			total_alloc += map_entries[i].value.size;
-			strncpy(last_task_name, map_entries[i].key.comm, sizeof(last_task_name) - 1);
+			snprintf(last_task_name, sizeof(last_task_name), "%s", map_entries[i].key.comm);
 			map_entries[i].printed = true;
 		}
 	}
@@ -840,16 +831,13 @@ int main(int argc, char **argv)
 	skel->rodata->milliseconds = env.milliseconds;
 
 	if (strcmp(env.heap_name, "0") != 0) {
-		strncpy((char *)skel->rodata->heap_name_filter, env.heap_name, sizeof(skel->rodata->heap_name_filter) - 1);
-		skel->rodata->heap_name_filter[sizeof(skel->rodata->heap_name_filter) - 1] = '\0';
+		snprintf((char *)skel->rodata->heap_name_filter, sizeof(skel->rodata->heap_name_filter), "%s", env.heap_name);
 	}
 	if (strcmp(env.task_name, "0") != 0) {
-		strncpy((char *)skel->rodata->task_name_filter, env.task_name, sizeof(skel->rodata->task_name_filter) - 1);
-		skel->rodata->task_name_filter[sizeof(skel->rodata->task_name_filter) - 1] = '\0';
+		snprintf((char *)skel->rodata->task_name_filter, sizeof(skel->rodata->task_name_filter), "%s", env.task_name);
 	}
 	if (strcmp(env.caller_name, "0") != 0) {
-		strncpy((char *)skel->rodata->caller_name_filter, env.caller_name, sizeof(skel->rodata->caller_name_filter) - 1);
-		skel->rodata->caller_name_filter[sizeof(skel->rodata->caller_name_filter) - 1] = '\0';
+		snprintf((char *)skel->rodata->caller_name_filter, sizeof(skel->rodata->caller_name_filter), "%s", env.caller_name);
 	}
 
 	if (is_use_rtk_heap()) {
