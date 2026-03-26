@@ -3,6 +3,7 @@
 
 #define MAX_CPU_NR 256
 #define MAX_IDLE_STATE_NR 16
+#define PWR_EVENT_EXIT 0xFFFFFFFF
 
 struct idle_t {
 	__u64 latency_sum;

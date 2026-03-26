@@ -14,6 +14,8 @@ const volatile __u32 state_mask = 0;
 const volatile bool histogram = false;
 const volatile bool milliseconds = false;
 const volatile bool microseconds = false;
+const volatile int state_offset = 0;
+const volatile int cpu_id_offset = 0;
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -141,91 +143,88 @@ static void update_overlap_table(u64 ts, int cpu, int state, int is_entry)
 	}
 }
 
-SEC("kprobe/psci_enter_idle_state")
-int BPF_KPROBE(kprobe__psci_enter_idle_state, struct cpuidle_device *dev,
-		struct cpuidle_driver *drv, int idx)
+SEC("tp/power/cpu_idle")
+int handle_cpu_idle(void *ctx)
 {
 	__u64 ts = bpf_ktime_get_ns();
-	__u32 cpu = bpf_get_smp_processor_id();
-	__u32 state_idx = idx;
+	__u32 cpu;
+	__u32 state;
 
-	bpf_map_update_elem(&start, &cpu, &ts, BPF_ANY);
-	bpf_map_update_elem(&arguments, &cpu, &state_idx, BPF_ANY);
+	bpf_probe_read_kernel(&state, sizeof(state), ctx + state_offset);
+	if (cpu_id_offset >= 0)
+		bpf_probe_read_kernel(&cpu, sizeof(cpu), ctx + cpu_id_offset);
+	else
+		cpu = bpf_get_smp_processor_id();
 
-	if (least_state > 0 || dump_overlap)
-		update_overlap_table(ts, cpu, idx, 1);
+	/* If state is NOT exit, it is ENTRY */
+	if (state != PWR_EVENT_EXIT) {
+		bpf_map_update_elem(&start, &cpu, &ts, BPF_ANY);
+		bpf_map_update_elem(&arguments, &cpu, &state, BPF_ANY);
 
-	return 0;
-}
-
-SEC("kretprobe/psci_enter_idle_state")
-int BPF_KRETPROBE(kretprobe__psci_enter_idle_state, int ret)
-{
-	__u64 ts = bpf_ktime_get_ns();
-	__u64 *tsp;
-	__u32 *argp;
-	__u32 cpu = bpf_get_smp_processor_id();
-
-	tsp = bpf_map_lookup_elem(&start, &cpu);
-	argp = bpf_map_lookup_elem(&arguments, &cpu);
-	if (!tsp || !argp)
-		return 0;
-
-	__u64 delta = ts - *tsp;
-	int state_idx = *argp;
-
-	bpf_map_delete_elem(&start, &cpu);
-	bpf_map_delete_elem(&arguments, &cpu);
-
-	if (state_idx < 0 || state_idx >= state_num)
-		return 0;
-
-	__u32 key = cpu * state_num + state_idx;
-	struct idle_t *stat;
-
-	stat = bpf_map_lookup_elem(&idlestats, &key);
-	if (!stat)
-		return 0; /* Should not happen */
-
-	if (ret < 0) {
-		__sync_fetch_and_add(&stat->error_times, 1);
+		if (least_state > 0 || dump_overlap)
+			update_overlap_table(ts, cpu, state, 1);
 	} else {
+		/* EXIT */
+		__u64 *tsp;
+		__u32 *argp;
+
+		tsp = bpf_map_lookup_elem(&start, &cpu);
+		argp = bpf_map_lookup_elem(&arguments, &cpu);
+		if (!tsp || !argp)
+			return 0;
+
+		__u64 delta = ts - *tsp;
+		__u32 state_idx = *argp;
+
+		bpf_map_delete_elem(&start, &cpu);
+		bpf_map_delete_elem(&arguments, &cpu);
+
+		if (state_idx >= state_num)
+			return 0;
+
+		__u32 key = cpu * state_num + state_idx;
+		struct idle_t *stat;
+
+		stat = bpf_map_lookup_elem(&idlestats, &key);
+		if (!stat)
+			return 0;
+
 		__sync_fetch_and_add(&stat->latency_sum, delta);
-	}
-	__sync_fetch_and_add(&stat->count, 1);
+		__sync_fetch_and_add(&stat->count, 1);
 
-	if (histogram) {
-		if (ret >= 0 && (core_mask & (1 << cpu)) &&
-				(state_mask & (1 << ret))) {
-			__u64 latency = delta;
-			__u32 idx = 0;
-			__u64 *sum;
+		if (histogram) {
+			if ((core_mask & (1ULL << cpu)) &&
+					(state_mask & (1ULL << state_idx))) {
+				__u64 latency = delta;
+				__u32 idx = 0;
+				__u64 *sum;
 
-			if (milliseconds)
-				latency /= 1000000;
-			else if (microseconds)
-				latency /= 1000;
+				if (milliseconds)
+					latency /= 1000000;
+				else if (microseconds)
+					latency /= 1000;
 
-			sum = bpf_map_lookup_elem(&latency_sum, &idx);
-			if (sum)
-				__sync_fetch_and_add(sum, latency);
+				sum = bpf_map_lookup_elem(&latency_sum, &idx);
+				if (sum)
+					__sync_fetch_and_add(sum, latency);
 
-			idx = 1;
-			sum = bpf_map_lookup_elem(&latency_sum, &idx);
-			if (sum)
-				__sync_fetch_and_add(sum, 1);
+				idx = 1;
+				sum = bpf_map_lookup_elem(&latency_sum, &idx);
+				if (sum)
+					__sync_fetch_and_add(sum, 1);
 
-			__u32 slot = log2l(latency);
-			if (slot >= 32)
-				slot = 31;
-			sum = bpf_map_lookup_elem(&dist, &slot);
-			if (sum)
-				__sync_fetch_and_add(sum, 1);
+				__u32 slot = log2l(latency);
+				if (slot >= 32)
+					slot = 31;
+				sum = bpf_map_lookup_elem(&dist, &slot);
+				if (sum)
+					__sync_fetch_and_add(sum, 1);
+			}
 		}
-	}
 
-	if (least_state > 0 || dump_overlap)
-		update_overlap_table(ts, cpu, ret, 0);
+		if (least_state > 0 || dump_overlap)
+			update_overlap_table(ts, cpu, state_idx, 0);
+	}
 
 	return 0;
 }

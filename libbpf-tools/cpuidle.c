@@ -244,21 +244,38 @@ static int check_driver(void)
 {
 	FILE *f = fopen("/sys/devices/system/cpu/cpuidle/current_driver", "r");
 	if (!f) {
-		warn("Failed to open /sys/devices/system/cpu/cpuidle/current_driver\n");
-		return -1;
+		warn("Warning: Failed to open /sys/devices/system/cpu/cpuidle/current_driver\n");
+		return 0;
 	}
 	char drv_name[128];
 	if (fscanf(f, "%s", drv_name) != 1) {
-		warn("Failed to read driver name\n");
+		warn("Warning: Failed to read driver name\n");
 		fclose(f);
-		return -1;
+		return 0;
 	}
 	fclose(f);
 	if (strcmp(drv_name, "psci_idle") != 0) {
-		warn("The cpuidle driver is not implemented by psci.\n");
-		return -1;
+		warn("Warning: The cpuidle driver is not implemented by psci.\n");
 	}
 	return 0;
+}
+
+static void get_sysfs_rejected(__u64 counts[MAX_IDLE_STATE_NR][MAX_CPU_NR], int cpu_num, int state_num)
+{
+	for (int c = 0; c < cpu_num; c++) {
+		for (int s = 0; s < state_num; s++) {
+			char path[128];
+			snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%d/cpuidle/state%d/rejected", c, s);
+			FILE *f = fopen(path, "r");
+			if (f) {
+				if (fscanf(f, "%llu", &counts[s][c]) != 1)
+					counts[s][c] = 0;
+				fclose(f);
+			} else {
+				counts[s][c] = 0;
+			}
+		}
+	}
 }
 
 enum FMAT {
@@ -366,6 +383,39 @@ static void print_idle_table(enum FMAT fmat, int cpu_num, int state_num,
 	printf("%15.2f\n\n", val_convert(fmat, allcpustate.latency_sum, allcpustate.error_times, allcpustate.count, true, cpu_num, interval));
 }
 
+static int get_tp_field_offset(const char *category, const char *event, const char *field)
+{
+	char path[256];
+	char line[512];
+	FILE *f;
+	int offset = -1;
+
+	snprintf(path, sizeof(path), "/sys/kernel/tracing/events/%s/%s/format", category, event);
+	f = fopen(path, "r");
+	if (!f) {
+		snprintf(path, sizeof(path), "/sys/kernel/debug/tracing/events/%s/%s/format", category, event);
+		f = fopen(path, "r");
+	}
+	if (!f)
+		return -1;
+
+	while (fgets(line, sizeof(line), f)) {
+		char *p;
+		if (!(p = strstr(line, "field:")))
+			continue;
+		if (!strstr(line, field))
+			continue;
+		if (!(p = strstr(line, "offset:")))
+			continue;
+		if (sscanf(p, "offset:%d", &offset) != 1)
+			offset = -1;
+		break;
+	}
+
+	fclose(f);
+	return offset;
+}
+
 int main(int argc, char **argv)
 {
 	struct argparse argparse;
@@ -398,11 +448,19 @@ int main(int argc, char **argv)
 
 	int state_num = get_max_idle_state_num(cpu_num);
 	if (state_num <= 0) {
-		warn("Cpuidle is not implemented on this platform.\n");
+		warn("cpuidle is not implemented on this platform.\n");
 		return 1;
 	}
 	if (state_num > MAX_IDLE_STATE_NR) {
 		warn("Idle state count %d exceeds max %d\n", state_num, MAX_IDLE_STATE_NR);
+		return 1;
+	}
+
+	int state_offset = get_tp_field_offset("power", "cpu_idle", "state");
+	int cpu_id_offset = get_tp_field_offset("power", "cpu_idle", "cpu_id");
+
+	if (state_offset < 0) {
+		warn("Failed to get offset of 'state' field in cpu_idle tracepoint\n");
 		return 1;
 	}
 
@@ -419,6 +477,8 @@ int main(int argc, char **argv)
 	skel->rodata->least_state = env.least;
 	skel->rodata->dump_overlap = env.dump_overlap;
 	skel->rodata->histogram = env.histogram;
+	skel->rodata->state_offset = state_offset;
+	skel->rodata->cpu_id_offset = cpu_id_offset;
 	if (env.histogram) {
 		if (env.core_mask == 0)
 			env.core_mask = (1 << cpu_num) - 1;
@@ -452,10 +512,12 @@ int main(int argc, char **argv)
 	printf("Tracing CPUidle... Hit Ctrl-C to end.\n");
 
 	struct idle_t prev_percpustate[MAX_IDLE_STATE_NR][MAX_CPU_NR] = {};
+	__u64 prev_rejected[MAX_IDLE_STATE_NR][MAX_CPU_NR] = {};
 	__u64 prev_all_cpu_sleep = 0;
 	__u64 prev_latency_sum[2] = {};
 	__u64 prev_dist[32] = {};
 
+	get_sysfs_rejected(prev_rejected, cpu_num, state_num);
 	clock_gettime(CLOCK_MONOTONIC, &start_time);
 
 	for (int i = 0; ; i++) {
@@ -475,6 +537,9 @@ int main(int argc, char **argv)
 		start_time = end_time;
 
 		struct idle_t percpustate[MAX_IDLE_STATE_NR][MAX_CPU_NR] = {};
+		__u64 curr_rejected[MAX_IDLE_STATE_NR][MAX_CPU_NR] = {};
+		get_sysfs_rejected(curr_rejected, cpu_num, state_num);
+
 		int idlestats_fd = bpf_map__fd(skel->maps.idlestats);
 		for (int j = 0; j < state_num; j++) {
 			for (int k = 0; k < cpu_num; k++) {
@@ -482,10 +547,13 @@ int main(int argc, char **argv)
 				struct idle_t current_stat;
 				if (bpf_map_lookup_elem(idlestats_fd, &key, &current_stat) == 0) {
 					percpustate[j][k].latency_sum = current_stat.latency_sum - prev_percpustate[j][k].latency_sum;
-					percpustate[j][k].error_times = current_stat.error_times - prev_percpustate[j][k].error_times;
 					percpustate[j][k].count = current_stat.count - prev_percpustate[j][k].count;
 					prev_percpustate[j][k] = current_stat;
 				}
+
+				__u64 delta_err = curr_rejected[j][k] - prev_rejected[j][k];
+				percpustate[j][k].error_times = delta_err;
+				prev_rejected[j][k] = curr_rejected[j][k];
 			}
 		}
 
