@@ -80,7 +80,7 @@ static void resolve_cdev_names(void)
 		return;
 
 	while ((ent = readdir(dir)) != NULL) {
-		char zone_path[256], type_path[256];
+		char zone_path[512], type_path[520];
 		char z_type[64];
 		FILE *f;
 
@@ -113,7 +113,7 @@ static void resolve_cdev_names(void)
 		while ((ze = readdir(zdir)) != NULL) {
 			char *p;
 			int idx;
-			char cdev_type_path[320], cname[MAX_DEVICE_NAME];
+			char cdev_type_path[540], cname[MAX_DEVICE_NAME];
 
 			if (strncmp(ze->d_name, "cdev", 4) != 0)
 				continue;
@@ -131,8 +131,8 @@ static void resolve_cdev_names(void)
 				continue;
 			if (fgets(cname, sizeof(cname), f)) {
 				cname[strcspn(cname, "\n")] = '\0';
-				strncpy(cdev_names[idx], cname,
-					MAX_DEVICE_NAME - 1);
+				snprintf(cdev_names[idx], MAX_DEVICE_NAME,
+					 "%s", cname);
 			}
 			fclose(f);
 		}
@@ -169,7 +169,7 @@ static void normalize_name(const char *in, char *out, size_t outsz)
 	if (strchr(s, '.')) {
 		char work[MAX_DEVICE_NAME];
 		char result[MAX_DEVICE_NAME] = "";
-		strncpy(work, s, sizeof(work) - 1);
+		snprintf(work, sizeof(work), "%s", s);
 		char *tok = strtok(work, ".");
 		while (tok) {
 			/* Check if purely digits */
