@@ -85,6 +85,7 @@ APPS = \
 	oomkill \
 	pageowner \
 	pagealloctop \
+	poweralloc \
 	profile \
 	readahead \
 	rpcsnoop \
