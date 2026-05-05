@@ -63,14 +63,29 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 {
 	const struct event *e = data;
 	struct cmatrack_bpf *skel = ctx;
+	static long long start_ts;
+	struct timeval tv;
+	struct tm *tm;
+	char time_str[16];
+
+	gettimeofday(&tv, NULL);
+	tm = localtime(&tv.tv_sec);
+	sprintf(time_str, "%02d:%02d:%02d", tm->tm_hour, tm->tm_min, tm->tm_sec);
+
+	if (start_ts == 0)
+		start_ts = get_ktime_ns();
 
 	if (e->range_mode) {
-		printf("%-14.14s %-6d %-6d %5ld %10lx %10lx %12d %12d %8s\n",
+		printf("%-9s %-11.6f %-14.14s %-6d %-6d %5ld %10lx %10lx %12d %12d %8s\n",
+				time_str,
+				(get_ktime_ns() - start_ts) / 1000000000.0,
 				e->comm, e->tgid, e->pid, e->range.count,
 				e->range.start_pfn, e->range.end_pfn, e->migrate_succeeded, e->migrate_failed,
 				e->fail ? "FAIL" : "SUCCESS");
 	} else {
-		printf("%-14.14s %-6d %-6d %8.2f %5ld %5d %12d %12d %8s\n",
+		printf("%-9s %-11.6f %-14.14s %-6d %-6d %8.2f %5ld %5d %12d %12d %8s\n",
+				time_str,
+				(get_ktime_ns() - start_ts) / 1000000000.0,
 				e->comm, e->tgid, e->pid, (float)e->alloc.duration_ns / 1000000,
 				e->alloc.count, e->alloc.align, e->migrate_succeeded, e->migrate_failed,
 				e->fail ? "FAIL" : "SUCCESS");
@@ -111,12 +126,12 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 static void print_headers(void)
 {
 	if (env.range) {
-		printf("%-14s %-6s %-6s %5s %10s %10s %12s %12s %8s\n",
-				"COMM", "TGID", "PID", "PAGES", "START_PFN", "END_PFN",
+		printf("%-9s %-11s %-14s %-6s %-6s %5s %10s %10s %12s %12s %8s\n",
+				"TIME(s)", "ELAPSED", "COMM", "TGID", "PID", "PAGES", "START_PFN", "END_PFN",
 				"MIGRATE_SUCC", "MIGRATE_FAIL", "RESULT");
 	} else {
-		printf("%-14s %-6s %-6s %8s %5s %5s %12s %12s %8s\n",
-				"COMM", "TGID", "PID", "LAT(ms)", "PAGES", "ALIGN",
+		printf("%-9s %-11s %-14s %-6s %-6s %8s %5s %5s %12s %12s %8s\n",
+				"TIME(s)", "ELAPSED", "COMM", "TGID", "PID", "LAT(ms)", "PAGES", "ALIGN",
 				"MIGRATE_SUCC", "MIGRATE_FAIL", "RESULT");
 	}
 }

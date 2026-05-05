@@ -69,6 +69,13 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 	const struct event *e = data;
 	static long long start_ts;
 	long long page_size = sysconf(_SC_PAGESIZE);
+	struct timeval tv;
+	struct tm *tm;
+	char time_str[16];
+
+	gettimeofday(&tv, NULL);
+	tm = localtime(&tv.tv_sec);
+	sprintf(time_str, "%02d:%02d:%02d", tm->tm_hour, tm->tm_min, tm->tm_sec);
 
 	if (start_ts == 0)
 		start_ts = get_ktime_ns();
@@ -79,7 +86,8 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 			start_addr = (unsigned long long)e->pfn * page_size;
 			end_addr = ((unsigned long long)e->pfn + e->count) * page_size;
 		}
-		printf("%-11.6f %-14.14s %-6d %-6d %8.2f %5llu %10llx %10llx %5u %8s %8s %8lld\n",
+		printf("%-9s %-11.6f %-14.14s %-6d %-6d %8.2f %5llu %10llx %10llx %5u %8s %8s %8lld\n",
+			time_str,
 			(get_ktime_ns() - start_ts) / 1000000000.0,
 			e->comm, e->tgid, e->pid,
 			(float)e->duration / 1000000,
@@ -87,15 +95,17 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 			e->alloc ? "alloc" : "release",
 			e->fail ? "FAIL" : "SUCCESS", e->total_sz);
 	} else if (env.contig_range) {
-		printf("%-11.6f %-14.14s %-6d %-6d %8.2f %5llu %5s %8s %8s %8lld\n",
+		printf("%-9s %-11.6f %-14.14s %-6d %-6d %8.2f %5llu %5s %5u %8s %8s %8lld\n",
+			time_str,
 			(get_ktime_ns() - start_ts) / 1000000000.0,
 			e->comm, e->tgid, e->pid,
 			(float)e->duration / 1000000,
-			e->count, "NULL",
+			e->count, "NULL", e->align,
 			e->alloc ? "alloc" : "release",
 			e->fail ? "FAIL" : "SUCCESS", e->total_sz);
 	} else {
-		printf("%-11.6f %-14.14s %-6d %-6d %8.2f %5llu %5u %8s %8s %8lld\n",
+		printf("%-9s %-11.6f %-14.14s %-6d %-6d %8.2f %5llu %5u %8s %8s %8lld\n",
+			time_str,
 			(get_ktime_ns() - start_ts) / 1000000000.0,
 			e->comm, e->tgid, e->pid,
 			(float)e->duration / 1000000,
@@ -110,13 +120,13 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 static void print_headers(void)
 {
 	if (env.addr_range) {
-		printf("%-11s %-14s %-6s %-6s %8s %5s %10s %10s %5s %8s %8s %8s\n",
-				"TIME(s)", "COMM", "TGID", "PID", "LAT(ms)",
+		printf("%-9s %-11s %-14s %-6s %-6s %8s %5s %10s %10s %5s %8s %8s %8s\n",
+				"TIME(s)", "ELAPSED", "COMM", "TGID", "PID", "LAT(ms)",
 				"PAGES", "START_ADDR", "END_ADDR", "ALIGN", "ACTION", "RESULT",
 				"LEAK_PG");
 	} else {
-		printf("%-11s %-14s %-6s %-6s %8s %5s %5s %8s %8s %8s\n",
-				"TIME(s)", "COMM", "TGID", "PID", "LAT(ms)",
+		printf("%-9s %-11s %-14s %-6s %-6s %8s %5s %5s %8s %8s %8s\n",
+				"TIME(s)", "ELAPSED", "COMM", "TGID", "PID", "LAT(ms)",
 				"PAGES", "ALIGN", "ACTION", "RESULT", "LEAK_PG");
 	}
 }
