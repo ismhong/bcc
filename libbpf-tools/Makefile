@@ -116,6 +116,7 @@ APPS = \
 	tcplife \
 	tcppktlat \
 	tcprtt \
+	tcpwin \
 	tcpstates \
 	tcpsynbl \
 	tcptop \
