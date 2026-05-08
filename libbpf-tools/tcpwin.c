@@ -125,6 +125,9 @@ static int print_hist(struct bpf_map *map, const char *title, const char *units)
 	struct hist zero_hist = {0};
 	int key = 0;
 
+	if (fd < 0)
+		return -1;
+
 	err = bpf_map_lookup_elem(fd, &key, &hist);
 	if (err < 0) {
 		return -1;
