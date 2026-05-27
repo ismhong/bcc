@@ -105,6 +105,7 @@ APPS = \
 	sigsnoop \
 	slabratetop \
 	softirqs \
+	softirqslower \
 	solisten \
 	stackcount \
 	statsnoop \
