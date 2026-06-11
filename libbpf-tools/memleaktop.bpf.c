@@ -135,8 +135,14 @@ static inline int gen_free_enter(u64 address, int kmem_func) {
 	if (!sum_size)
 		return 0;
 
-	__sync_fetch_and_sub(&sum_size->size, size);
-	__sync_fetch_and_sub(&sum_size->count, 1);
+	/* Underflow guard: clamp to 0 instead of wrapping around to 2^64-N */
+	if (sum_size->size >= size)
+		__sync_fetch_and_sub(&sum_size->size, size);
+	else
+		sum_size->size = 0;
+
+	if (sum_size->count > 0)
+		__sync_fetch_and_sub(&sum_size->count, 1);
 
 	if (sum_size->size == 0)
 		bpf_map_delete_elem(&pid_sizes, alloc_key);
