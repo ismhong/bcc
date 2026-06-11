@@ -2,6 +2,10 @@
 #ifndef __MEMLEAKTOP_H
 #define __MEMLEAKTOP_H
 
+#ifndef __PAGE_SIZE
+#define __PAGE_SIZE 4096
+#endif
+
 #define TASK_COMM_LEN 16
 
 struct key_t {
