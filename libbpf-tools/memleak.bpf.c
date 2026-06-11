@@ -79,6 +79,15 @@ static void update_statistics_del(u64 stack_id, u64 sz)
 		return;
 	}
 
+	/* Guard against underflow: if counters are already zero or total_size
+	 * is smaller than sz (can happen with wa_missing_free when a free fires
+	 * before the matching entry is in combined_allocs), skip the subtraction
+	 * instead of wrapping the 40/24-bit bitfield into garbage values. */
+	if (existing_cinfo->number_of_allocs == 0 ||
+		existing_cinfo->total_size < sz) {
+		return;
+	}
+
 	const union combined_alloc_info decremental_cinfo = {
 		.total_size = sz,
 		.number_of_allocs = 1
