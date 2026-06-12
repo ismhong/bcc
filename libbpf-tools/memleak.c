@@ -52,6 +52,7 @@ static struct env {
 	char command[32];
 	char symbols_prefix[16];
 	int map_size;
+	bool sort_stack;
 } env = {
 	.interval = 5, // posarg 1
 	.map_size = ALLOCS_MAX_ENTRIES,
@@ -92,6 +93,7 @@ struct allocation {
 
 #define OPT_PERF_MAX_STACK_DEPTH	1 /* --perf-max-stack-depth */
 #define OPT_STACK_STORAGE_SIZE		2 /* --stack-storage-size */
+#define OPT_SORT_STACK			3 /* --sort-stack */
 
 #define __ATTACH_UPROBE(skel, sym_name, prog_name, is_retprobe) \
 	do { \
@@ -180,7 +182,7 @@ const char *argp_program_bug_address =
 const char argp_args_doc[] =
 "Trace outstanding memory allocations\n"
 "\n"
-"USAGE: memleak [-h] [-m MAP_SIZE] [-c COMMAND] [-p PID] [-t] [-n] [-a] [-o AGE_MS] [-C] [-F] [-s SAMPLE_RATE] [-T TOP_STACKS] [-z MIN_SIZE] [-Z MAX_SIZE] [-O OBJECT] [-P] [INTERVAL] [INTERVALS]\n"
+"USAGE: memleak [-h] [-m MAP_SIZE] [-c COMMAND] [-p PID] [-t] [-n] [-a] [-o AGE_MS] [-C] [-F] [-s SAMPLE_RATE] [-T TOP_STACKS] [-z MIN_SIZE] [-Z MAX_SIZE] [-O OBJECT] [-P] [--sort-stack] [INTERVAL] [INTERVALS]\n"
 "\n"
 "EXAMPLES:\n"
 "./memleak -p $(pidof allocs)\n"
@@ -227,6 +229,8 @@ static const struct argp_option argp_options[] = {
 	 "the number of unique stack traces that can be stored and displayed (default 10240)", 0 },
 	{"perf-max-stack-depth", OPT_PERF_MAX_STACK_DEPTH,
 	 "PERF-MAX-STACK-DEPTH", 0, "the limit for both kernel and user stack traces (default 127)", 0 },
+	{"sort-stack", OPT_SORT_STACK, 0, 0,
+	 "sort the top stack by stack id instead of size", 0 },
 	{"verbose", 'v', NULL, 0, "verbose debug output", 0 },
 	{},
 };
@@ -603,6 +607,9 @@ error_t argp_parse_arg(int key, char *arg, struct argp_state *state)
 	case 'v':
 		env.verbose = true;
 		break;
+	case OPT_SORT_STACK:
+		env.sort_stack = true;
+		break;
 	case OPT_PERF_MAX_STACK_DEPTH:
 		errno = 0;
 		env.perf_max_stack_depth = strtol(arg, NULL, 10);
@@ -849,7 +856,8 @@ int print_stack_frames(struct allocation *allocs, size_t nr_allocs, int stack_tr
 	for (size_t i = 0; i < nr_allocs; ++i) {
 		const struct allocation *alloc = &allocs[i];
 
-		printf("%zu bytes in %zu allocations from stack\n", alloc->size, alloc->count);
+		printf("%zu bytes in %zu allocations from stack %lld\n",
+			alloc->size, alloc->count, (long long)alloc->stack_id);
 
 		if (env.show_allocs) {
 			struct allocation_node* it = alloc->allocations;
@@ -885,6 +893,22 @@ int alloc_size_compare(const void *a, const void *b)
 		return 1;
 
 	if (x->size < y->size)
+		return -1;
+
+	return 0;
+}
+
+int alloc_stack_id_compare(const void *a, const void *b)
+{
+	const struct allocation *x = (struct allocation *)a;
+	const struct allocation *y = (struct allocation *)b;
+
+	// ascending order by stack_id
+
+	if (x->stack_id > y->stack_id)
+		return 1;
+
+	if (x->stack_id < y->stack_id)
 		return -1;
 
 	return 0;
@@ -994,7 +1018,10 @@ int print_outstanding_allocs(int allocs_fd, int stack_traces_fd)
 	}
 
 	// sort the allocs array in ascending order
-	qsort(allocs, nr_allocs, sizeof(allocs[0]), alloc_size_compare);
+	if (env.sort_stack)
+		qsort(allocs, nr_allocs, sizeof(allocs[0]), alloc_stack_id_compare);
+	else
+		qsort(allocs, nr_allocs, sizeof(allocs[0]), alloc_size_compare);
 
 	// get min of allocs we stored vs the top N requested stacks
 	size_t nr_allocs_to_show = nr_allocs < env.top_stacks ? nr_allocs : env.top_stacks;
@@ -1096,7 +1123,10 @@ int print_outstanding_combined_allocs(int combined_allocs_fd, int stack_traces_f
 		nr_allocs++;
 	}
 
-	qsort(allocs, nr_allocs, sizeof(allocs[0]), alloc_size_compare);
+	if (env.sort_stack)
+		qsort(allocs, nr_allocs, sizeof(allocs[0]), alloc_stack_id_compare);
+	else
+		qsort(allocs, nr_allocs, sizeof(allocs[0]), alloc_size_compare);
 
 	// get min of allocs we stored vs the top N requested stacks
 	size_t nr_allocs_to_show = nr_allocs < env.top_stacks ? nr_allocs : env.top_stacks;
