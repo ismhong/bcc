@@ -51,8 +51,10 @@ static struct env {
 	bool verbose;
 	char command[32];
 	char symbols_prefix[16];
+	int map_size;
 } env = {
 	.interval = 5, // posarg 1
+	.map_size = ALLOCS_MAX_ENTRIES,
 	.nr_intervals = -1, // posarg 2
 	.pid = -1, // -p --pid
 	.trace_all = false, // -t --trace
@@ -178,7 +180,7 @@ const char *argp_program_bug_address =
 const char argp_args_doc[] =
 "Trace outstanding memory allocations\n"
 "\n"
-"USAGE: memleak [-h] [-c COMMAND] [-p PID] [-t] [-n] [-a] [-o AGE_MS] [-C] [-F] [-s SAMPLE_RATE] [-T TOP_STACKS] [-z MIN_SIZE] [-Z MAX_SIZE] [-O OBJECT] [-P] [INTERVAL] [INTERVALS]\n"
+"USAGE: memleak [-h] [-m MAP_SIZE] [-c COMMAND] [-p PID] [-t] [-n] [-a] [-o AGE_MS] [-C] [-F] [-s SAMPLE_RATE] [-T TOP_STACKS] [-z MIN_SIZE] [-Z MAX_SIZE] [-O OBJECT] [-P] [INTERVAL] [INTERVALS]\n"
 "\n"
 "EXAMPLES:\n"
 "./memleak -p $(pidof allocs)\n"
@@ -219,6 +221,8 @@ static const struct argp_option argp_options[] = {
 	{"obj", 'O', "OBJECT", 0, "attach to allocator functions in the specified object", 0 },
 	{"percpu", 'P', NULL, 0, "trace percpu allocations", 0 },
 	{"symbols-prefix", 'S', "SYMBOLS_PREFIX", 0, "memory allocator symbols prefix", 0 },
+	{"map-size", 'm', "MAP_SIZE", 0,
+	 "total entries of BPF map to track memleak. Default 1000000", 0 },
 	{"stack-storage-size", OPT_STACK_STORAGE_SIZE, "STACK-STORAGE-SIZE", 0,
 	 "the number of unique stack traces that can be stored and displayed (default 10240)", 0 },
 	{"perf-max-stack-depth", OPT_PERF_MAX_STACK_DEPTH,
@@ -348,9 +352,9 @@ int main(int argc, char *argv[])
 
 	// allocate space for storing "allocation" structs
 	if (env.combined_only)
-		allocs = calloc(COMBINED_ALLOCS_MAX_ENTRIES, sizeof(*allocs));
+		allocs = calloc(env.stack_map_max_entries, sizeof(*allocs));
 	else
-		allocs = calloc(ALLOCS_MAX_ENTRIES, sizeof(*allocs));
+		allocs = calloc(env.map_size, sizeof(*allocs));
 
 	if (!allocs) {
 		fprintf(stderr, "failed to allocate array\n");
@@ -377,12 +381,14 @@ int main(int argc, char *argv[])
 	skel->rodata->stack_flags = env.kernel_trace ? 0 : BPF_F_USER_STACK;
 	skel->rodata->wa_missing_free = env.wa_missing_free;
 
+	bpf_map__set_max_entries(skel->maps.allocs, env.map_size);
+
 	bpf_map__set_value_size(skel->maps.stack_traces,
 				env.perf_max_stack_depth * sizeof(unsigned long));
 	bpf_map__set_max_entries(skel->maps.stack_traces, env.stack_map_max_entries);
 
 	if (env.combined_only) {
-		bpf_map__set_max_entries(skel->maps.combined_allocs, COMBINED_ALLOCS_MAX_ENTRIES);
+		bpf_map__set_max_entries(skel->maps.combined_allocs, env.stack_map_max_entries);
 		skel->rodata->combined_only = true;
 	}
 
@@ -584,6 +590,15 @@ error_t argp_parse_arg(int key, char *arg, struct argp_state *state)
 	case 'P':
 		env.percpu = true;
 		break;
+	case 'm': {
+		const long val = argp_parse_long(key, arg, state);
+		if (val > INT_MAX) {
+			fprintf(stderr, "map-size too large\n");
+			argp_usage(state);
+		}
+		env.map_size = (int)val;
+		break;
+	}
 	case 'v':
 		env.verbose = true;
 		break;
