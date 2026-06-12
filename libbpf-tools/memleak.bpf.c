@@ -137,7 +137,8 @@ static int gen_alloc_exit2(void *ctx, u64 address)
 	bpf_map_delete_elem(&sizes, &tid);
 
 	if (address != 0 && address != MAP_FAILED) {
-		info.timestamp_ns = bpf_ktime_get_ns();
+		if (!combined_only)
+			info.timestamp_ns = bpf_ktime_get_ns();
 
 		info.stack_id = bpf_get_stackid(ctx, &stack_traces, stack_flags);
 
