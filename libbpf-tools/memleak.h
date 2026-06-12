@@ -20,4 +20,8 @@ union combined_alloc_info {
 	__u64 bits;
 };
 
+struct statistic_info_t {
+	__u64 hash_allocs_num;
+};
+
 #endif /* __MEMLEAK_H */

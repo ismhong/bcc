@@ -50,6 +50,13 @@ struct {
 	__type(key, u32);
 } stack_traces SEC(".maps");
 
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, u32);
+	__type(value, struct statistic_info_t);
+} statistic SEC(".maps");
+
 static union combined_alloc_info initial_cinfo;
 
 static void update_statistics_add(u64 stack_id, u64 sz)
@@ -137,8 +144,16 @@ static int gen_alloc_exit2(void *ctx, u64 address)
 
 		bpf_map_update_elem(&allocs, &address, &info, BPF_ANY);
 
-		if (combined_only)
+		if (combined_only) {
+			u32 zero = 0;
+			struct statistic_info_t *stat_info;
+
+			stat_info = bpf_map_lookup_elem(&statistic, &zero);
+			if (stat_info)
+				__sync_fetch_and_add(&stat_info->hash_allocs_num, 1);
+
 			update_statistics_add(info.stack_id, info.size);
+		}
 	}
 
 	if (trace_all) {
@@ -164,8 +179,16 @@ static int gen_free_enter(const void *address)
 
 	bpf_map_delete_elem(&allocs, &addr);
 
-	if (combined_only)
+	if (combined_only) {
+		u32 zero = 0;
+		struct statistic_info_t *stat_info;
+
+		stat_info = bpf_map_lookup_elem(&statistic, &zero);
+		if (stat_info)
+			__sync_fetch_and_sub(&stat_info->hash_allocs_num, 1);
+
 		update_statistics_del(info->stack_id, info->size);
+	}
 
 	if (trace_all) {
 		bpf_printk("free entered, address = %lx, size = %lu\n",
