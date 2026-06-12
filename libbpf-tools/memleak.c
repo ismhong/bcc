@@ -164,7 +164,7 @@ static int print_stack_frames(struct allocation *allocs, size_t nr_allocs, int s
 static int alloc_size_compare(const void *a, const void *b);
 
 static int print_outstanding_allocs(int allocs_fd, int stack_traces_fd);
-static int print_outstanding_combined_allocs(int combined_allocs_fd, int stack_traces_fd);
+static int print_outstanding_combined_allocs(int combined_allocs_fd, int stack_traces_fd, int statistic_fd);
 
 static bool has_kernel_node_tracepoints();
 static void disable_kernel_node_tracepoints(struct memleak_bpf *skel);
@@ -413,6 +413,7 @@ int main(int argc, char *argv[])
 	const int allocs_fd = bpf_map__fd(skel->maps.allocs);
 	const int combined_allocs_fd = bpf_map__fd(skel->maps.combined_allocs);
 	const int stack_traces_fd = bpf_map__fd(skel->maps.stack_traces);
+	const int statistic_fd = bpf_map__fd(skel->maps.statistic);
 
 	// if userspace oriented, attach uprobes
 	if (!env.kernel_trace) {
@@ -482,7 +483,7 @@ int main(int argc, char *argv[])
 		sleep(env.interval);
 
 		if (env.combined_only)
-			print_outstanding_combined_allocs(combined_allocs_fd, stack_traces_fd);
+			print_outstanding_combined_allocs(combined_allocs_fd, stack_traces_fd, statistic_fd);
 		else
 			print_outstanding_allocs(allocs_fd, stack_traces_fd);
 	}
@@ -1027,14 +1028,27 @@ int print_outstanding_allocs(int allocs_fd, int stack_traces_fd)
 	return 0;
 }
 
-int print_outstanding_combined_allocs(int combined_allocs_fd, int stack_traces_fd)
+int print_outstanding_combined_allocs(int combined_allocs_fd, int stack_traces_fd, int statistic_fd)
 {
+	struct statistic_info_t stat_info;
 	time_t t = time(NULL);
 	struct tm *tm = localtime(&t);
 
 	size_t nr_allocs = 0;
 	size_t nr_missing_stacks = 0;
 	size_t nr_collision_stacks = 0;
+
+	// check for map size overflow
+	uint32_t zero = 0;
+	if (!bpf_map_lookup_elem(statistic_fd, &zero, &stat_info)) {
+		if (stat_info.hash_allocs_num > (__u64)env.map_size) {
+			fprintf(stderr, "Exit because of BPF MAP size overflow\n");
+			fprintf(stderr, "hash_allocs_num:%llu exceeded map_size:%d\n",
+				(unsigned long long)stat_info.hash_allocs_num,
+				env.map_size);
+			exit(EXIT_FAILURE);
+		}
+	}
 
 	// for each stack_id "curr_key" and union combined_alloc_info "alloc"
 	// in bpf_map "combined_allocs"
