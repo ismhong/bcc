@@ -26,6 +26,13 @@ for tool in $(find . -maxdepth 1 -type f -executable); do
     strip -s "/app/out/debug/$(basename "$tool")" -o "/app/out/stripped/$(basename "$tool")"
 done
 
+# Build the single multi-call binary
+echo "Building libbpf-tools-multi binary..."
+cd /app/libbpf-tools-multi
+make -j$(nproc)
+cp libbpf-tools-box /app/out/debug/libbpf-tools-box
+strip -s libbpf-tools-box -o /app/out/stripped/libbpf-tools-box
+
 # Change ownership of the output files
 if [ -n "$UID" ] && [ -n "$GID" ]; then
     chown -R "$UID:$GID" /app/out
