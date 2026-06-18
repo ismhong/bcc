@@ -58,7 +58,7 @@ pub async fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
     let ebpf_data = EBPF.to_vec();
     let bpf = loader.load(&ebpf_data)?;
-    let bpf: &'static mut aya::Bpf = Box::leak(Box::new(bpf));
+    let bpf: &'static mut aya::Ebpf = Box::leak(Box::new(bpf));
 
     let program_enter: &mut KProbe = bpf
         .program_mut("execve_enter")
