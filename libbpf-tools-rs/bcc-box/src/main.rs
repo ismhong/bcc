@@ -7,6 +7,7 @@ fn print_help() {
     println!("\nAvailable tools:");
     println!("  opensnoop - Trace open syscalls");
     println!("  execsnoop - Trace exec syscalls");
+    println!("  softirqs  - Trace softirq event latency");
 }
 
 #[tokio::main]
@@ -45,6 +46,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 std::process::exit(1);
             }
         }
+        "softirqs" => {
+            if let Err(e) = tools::softirqs::run(&args[1..]).await {
+                eprintln!("Error executing softirqs: {}", e);
+                std::process::exit(1);
+            }
+        }
         _ => {
             if args.len() > 1 {
                 match args[1].as_str() {
@@ -57,6 +64,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "execsnoop" => {
                         if let Err(e) = tools::execsnoop::run(&args[2..]).await {
                             eprintln!("Error executing execsnoop: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                    "softirqs" => {
+                        if let Err(e) = tools::softirqs::run(&args[2..]).await {
+                            eprintln!("Error executing softirqs: {}", e);
                             std::process::exit(1);
                         }
                     }

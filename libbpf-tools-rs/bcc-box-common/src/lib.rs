@@ -31,3 +31,13 @@ pub struct ExecsnoopEvent {
     pub comm: [u8; TASK_COMM_LEN],
     pub args: [u8; FULL_MAX_ARGS_ARR],
 }
+
+pub const MAX_SLOTS: usize = 20;
+pub const NR_SOFTIRQS: usize = 10;
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct Hist {
+    pub slots: [u32; MAX_SLOTS],
+}
+
