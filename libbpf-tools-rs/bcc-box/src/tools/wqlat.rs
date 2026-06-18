@@ -6,8 +6,6 @@ use aya::{
     Endianness,
 };
 use clap::Parser;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use chrono::Local;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -206,13 +204,6 @@ pub async fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.expect("failed to listen for ctrl-c");
-        r.store(false, Ordering::SeqCst);
-    });
-
     println!("Tracing work queue request latency time... Hit Ctrl-C to end.");
 
     let interval_sec = opts.interval;
@@ -221,8 +212,14 @@ pub async fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let hists_map = bpf.take_map("WQLAT_HISTS").ok_or("map WQLAT_HISTS not found")?;
     let mut hists_map: HashMap<_, WqKey, u64> = HashMap::try_from(hists_map)?;
 
-    while running.load(Ordering::SeqCst) && times > 0 {
-        tokio::time::sleep(tokio::time::Duration::from_secs(interval_sec as u64)).await;
+    while times > 0 {
+        let mut got_ctrl_c = false;
+        tokio::select! {
+            _ = tokio::time::sleep(tokio::time::Duration::from_secs(interval_sec as u64)) => {}
+            _ = tokio::signal::ctrl_c() => {
+                got_ctrl_c = true;
+            }
+        }
 
         if opts.timestamp {
             let ts = Local::now().format("%H:%M:%S").to_string();
@@ -274,6 +271,9 @@ pub async fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         times -= 1;
+        if got_ctrl_c || times == 0 {
+            break;
+        }
     }
 
     Ok(())
