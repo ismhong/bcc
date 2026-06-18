@@ -57,4 +57,21 @@ pub struct IrqInfo {
     pub slots: [u32; MAX_SLOTS],
 }
 
+pub const WQ_NAME_LEN: usize = 24;
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct WqVal {
+    pub wq_name: [u8; WQ_NAME_LEN],
+    pub ts: u64,
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct WqKey {
+    pub wq_name: [u8; WQ_NAME_LEN],
+    pub slot: u64,
+}
+
+
 

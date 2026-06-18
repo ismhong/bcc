@@ -9,6 +9,7 @@ fn print_help() {
     println!("  execsnoop - Trace exec syscalls");
     println!("  softirqs  - Trace softirq event latency");
     println!("  hardirqs  - Trace hardirq event latency");
+    println!("  wqlat     - Trace workqueue request latency");
 }
 
 #[tokio::main]
@@ -59,6 +60,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 std::process::exit(1);
             }
         }
+        "wqlat" | "workqueue" => {
+            if let Err(e) = tools::wqlat::run(&args[1..]).await {
+                eprintln!("Error executing wqlat: {}", e);
+                std::process::exit(1);
+            }
+        }
         _ => {
             if args.len() > 1 {
                 match args[1].as_str() {
@@ -83,6 +90,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "hardirqs" => {
                         if let Err(e) = tools::hardirqs::run(&args[2..]).await {
                             eprintln!("Error executing hardirqs: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                    "wqlat" | "workqueue" => {
+                        if let Err(e) = tools::wqlat::run(&args[2..]).await {
+                            eprintln!("Error executing wqlat: {}", e);
                             std::process::exit(1);
                         }
                     }
