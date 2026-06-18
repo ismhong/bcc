@@ -41,3 +41,20 @@ pub struct Hist {
     pub slots: [u32; MAX_SLOTS],
 }
 
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct IrqKey {
+    pub name: [u8; 32],
+    pub cpu: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct IrqInfo {
+    pub count: u64,
+    pub total_time: u64,
+    pub max_time: u64,
+    pub slots: [u32; MAX_SLOTS],
+}
+
+
