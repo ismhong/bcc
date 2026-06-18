@@ -1,0 +1,15 @@
+[package]
+name = "bcc-box"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aya = { version = "0.13.1", features = ["async_tokio"] }
+aya-log = "0.2.1"
+clap = { version = "4.4", features = ["derive"] }
+tokio = { version = "1.35", features = ["macros", "rt", "rt-multi-thread", "net", "signal", "time"] }
+chrono = "0.4"
+bytes = "1.5"
+env_logger = "0.11"
+log = "0.4"
+bcc-box-common = { path = "../bcc-box-common" }

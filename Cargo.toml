@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "libbpf-tools-rs/bcc-box",
+    "libbpf-tools-rs/bcc-box-common",
+    "libbpf-tools-rs/bcc-box-ebpf",
+    "libbpf-tools-rs/xtask",
+]
+resolver = "2"

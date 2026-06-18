@@ -1,0 +1,12 @@
+[package]
+name = "bcc-box-ebpf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aya-ebpf = "0.1.1"
+bcc-box-common = { path = "../bcc-box-common" }
+
+[[bin]]
+name = "bcc-box-ebpf"
+path = "src/main.rs"

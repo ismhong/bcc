@@ -19,3 +19,7 @@ scripts/docker/output/
 
 # UAPI header generated for libbpf package-based builds
 src/cc/compat/linux/bpf.h
+
+# Rust build artifacts
+/target/
+/libbpf-tools-rs/bcc-box/resources/bcc-box-ebpf
