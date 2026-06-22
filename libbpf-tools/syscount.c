@@ -15,6 +15,7 @@
 #include "syscall_helpers.h"
 #include "btf_helpers.h"
 #include "trace_helpers.h"
+#include <limits.h>
 
 /* This structure extends data_t by adding a key item which should be sorted
  * together with the count and total_ns fields */

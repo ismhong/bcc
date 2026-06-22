@@ -20,6 +20,7 @@
 
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
+#include <limits.h>
 #include "funclatency.h"
 #include "funclatency.skel.h"
 #include "trace_helpers.h"

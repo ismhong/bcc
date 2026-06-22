@@ -16,6 +16,7 @@
 
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
+#include <limits.h>
 #include "gethostlatency.h"
 #include "gethostlatency.skel.h"
 #include "btf_helpers.h"
