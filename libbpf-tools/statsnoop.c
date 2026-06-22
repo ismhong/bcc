@@ -13,6 +13,7 @@
 
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
+#include <limits.h>
 #include "statsnoop.h"
 #include "statsnoop.skel.h"
 #include "btf_helpers.h"
