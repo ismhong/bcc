@@ -242,6 +242,12 @@ libbpf-tools-box: $(OUTPUT)/dispatch.o $(TOOL_OBJS) $(COMMON_OBJ) $(LIBBPF_OBJ)
 clean:
 	rm -rf $(OUTPUT) libbpf-tools-box
 
+DESTDIR ?= /usr/local/bin
+
+install: libbpf-tools-box
+	$(call msg,INSTALL,$(DESTDIR))
+	$(Q)./libbpf-tools-box --install -f $(DESTDIR)
+
 # Phony convenience: show how many _main symbols are linked
 .PHONY: verify
 verify: libbpf-tools-box

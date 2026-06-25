@@ -76,13 +76,61 @@ The output binary is `libbpf-tools-box` in the current directory.
 
 ### Busybox symlink style
 
+Create **symbolic links** for all tools in one command:
+
 ```bash
-for tool in $(./libbpf-tools-box 2>&1 | grep '  ' | awk '{print $1}'); do
-    ln -sf libbpf-tools-box "$tool"
-done
+./libbpf-tools-box --install -f /usr/local/bin
 ./opensnoop
 ./softirqs 1 5
 ```
+
+Or use `make install` after building:
+
+```bash
+make install DESTDIR=/usr/local/bin
+```
+
+See [`--install`](#--install) for all options.
+
+### --list
+
+List all available tool names (one per line, useful for scripting):
+
+```bash
+./libbpf-tools-box --list
+argdist
+bashreadline
+bindsnoop
+...
+```
+
+### --install
+
+Install symbolic links (or hardlinks) for all tools in a target directory:
+
+```bash
+# Create symbolic links (default)
+./libbpf-tools-box --install /usr/local/bin
+
+# Hardlinks (same filesystem, saves space)
+./libbpf-tools-box --install -H /usr/local/bin
+
+# Force overwrite existing links
+./libbpf-tools-box --install -f /usr/local/bin
+
+# Verbose mode — show what's being created
+./libbpf-tools-box --install -v -f /data/bcc/bin
+```
+
+Options:
+
+| Flag | Long | Description |
+|---|---|---|
+| *(default)* | | Create symbolic links |
+| `-s` | `--symbolic` | Explicit symbolic links (same as default) |
+| `-H` | `--hardlink` | Create hardlinks instead |
+| `-f` | `--force` | Overwrite existing files/links |
+| `-v` | `--verbose` | Print each link being created |
 
 ### On Android
 
@@ -91,6 +139,12 @@ adb push libbpf-tools-box /data/libbpf-tools-box
 adb shell "chmod +x /data/libbpf-tools-box"
 adb shell "/data/libbpf-tools-box opensnoop"
 adb shell "/data/libbpf-tools-box --btf /data/vmlinux softirqs 1 2"
+
+# Install all symlinks on the device
+adb shell "mkdir -p /data/bcc/bin"
+adb shell "/data/libbpf-tools-box --install -f /data/bcc/bin"
+adb shell "ls -l /data/bcc/bin/opensnoop"
+# → lrwxrwxrwx ... /data/bcc/bin/opensnoop -> /data/libbpf-tools-box
 ```
 
 ---

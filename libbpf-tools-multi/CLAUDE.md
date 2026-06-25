@@ -62,6 +62,38 @@ Tools in `libbpf-tools/` cannot be linked directly together because many define 
   └─ #include "../libbpf-tools/<toolname>.c"
 ```
 
+## Built-in Special Flags
+
+### `--list`
+
+Prints all available tool names (one per line, no descriptions). Useful for scripting.
+
+```bash
+./libbpf-tools-box --list
+./libbpf-tools-box --list | wc -l   # count tools
+```
+
+### `--install [-s] [-H] [-f] [-v] <dir>`
+
+Creates symlinks (or hardlinks) for all tools in a target directory — same concept as `busybox --install`.
+
+```bash
+# Create symbolic links (default)
+./libbpf-tools-box --install /usr/local/bin
+
+# Hardlinks (same filesystem, saves space)
+./libbpf-tools-box --install -H /usr/local/bin
+
+# Force overwrite
+./libbpf-tools-box --install -f /usr/local/bin
+```
+
+Or via the Makefile:
+
+```bash
+make install DESTDIR=/usr/local/bin
+```
+
 ### Key Files
 
 | File | Purpose |
