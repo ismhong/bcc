@@ -6,7 +6,8 @@ set -e
 # build-all.sh — Multi-arch Docker cross-build for libbpf-tools
 #
 # Usage:
-#   ./build-all.sh                    Incremental build (skip make clean)
+#   ./build-all.sh                    Incremental build (armhf, skip make clean)
+#   ./build-all.sh --arch arm64       Build for a specific target arch
 #   ./build-all.sh --clean            Full clean build (CI, cross-arch switch)
 #   ./build-all.sh --rebuild          Force rebuild Docker images
 #   ./build-all.sh --no-rebuild       Deprecated compat alias for auto-detect
@@ -29,21 +30,25 @@ show_help() {
 Usage: ./build-all.sh [OPTION]
 
 Multi-arch Docker cross-build for libbpf-tools (armhf).
+Default target is armhf. Use --arch to build for a different target.
 
 Options:
   -h, --help      Show this help message and exit
+  --arch <arch>   Target architecture(s). Default: armhf.
+                  Examples: --arch armhf, --arch "armhf x86_64"
   --clean         Full clean build (make clean before compile).
-                  Use for CI or when switching target architectures.
+                  Also runs UPX compression for release binaries.
                   Default: incremental build (only recompiles changed files).
-  --rebuild       Force rebuild of Docker image, even if already cached locally
+  --rebuild       Force rebuild of Docker images, even if already cached locally
   --no-rebuild    (deprecated) No-op; auto-detect now skips images if present
 
 How it works:
-  1. Builds the Docker image for the target arch (auto-skipped if already present).
-  2. Runs the build container via build.sh.
+  1. Builds Docker images for each target arch (auto-skipped if already present).
+  2. Runs the build container for each arch via build.sh.
      By default, build artifacts are reused across runs — only changed files
      are recompiled. Pass --clean for a pristine rebuild.
-  3. Strips, UPX-compresses, and summarizes output in libbpf-tools-out/<arch>/.
+  3. Strips executables. UPX compression and size summary only run in
+     clean builds (--clean), since they are time-consuming.
 
 Environment:
   The build container mounts the repo root as /app, so source changes are
@@ -51,9 +56,9 @@ Environment:
   directories for incremental builds.
 
 Examples:
-  ./build-all.sh              Incremental build (fast iteration)
-  ./build-all.sh --clean      Full clean build (CI or cross-arch switch)
-  ./build-all.sh --rebuild    Rebuild image after Dockerfile changes
+  ./build-all.sh                    Incremental build (armhf, fast)
+  ./build-all.sh --clean            Full clean build (CI or release)
+  ./build-all.sh --rebuild          Rebuild images after Dockerfile changes
 EOF
     exit 0
 }
@@ -69,10 +74,22 @@ FORCE_REBUILD=false
 # Pass --clean for a pristine rebuild (CI or cross-arch switch).
 BUILD_CLEAN=false
 
+# Default target architecture. Override with --arch.
+TARGET_ARCHS="armhf"
+
 # Handle flags
 case "$1" in
     -h|--help)
         show_help
+        ;;
+    --arch)
+        shift
+        if [ -z "$1" ]; then
+            echo "Error: --arch requires an argument (e.g., --arch armhf)"
+            exit 1
+        fi
+        TARGET_ARCHS="$1"
+        echo "Build target(s): $TARGET_ARCHS"
         ;;
     --clean)
         BUILD_CLEAN=true
@@ -120,9 +137,12 @@ InstallUpx() {
     chmod +x ./upx
 }
 
-InstallUpx
-
-TARGET_ARCHS="armhf"
+# Only download UPX for clean builds — incremental builds skip compression.
+if [ "$BUILD_CLEAN" = "true" ]; then
+    InstallUpx
+else
+    echo "Incremental build — skipping UPX download."
+fi
 
 # ---------------------------------------------------------------------------
 # Docker image build phase — only when needed
@@ -209,34 +229,39 @@ for arch in $TARGET_ARCHS; do
     echo "Build for $arch complete. Verifying output..."
     file "libbpf-tools-out/$arch/stripped/bashreadline"
 
-    # Compress stripped executables with UPX (if available)
-    UPX_DIR="libbpf-tools-out/$arch/upx"
-    mkdir -p "$UPX_DIR"
-    if [ -f "./upx" ]; then
-        echo "Compressing with UPX for $arch..."
-        for exe in "libbpf-tools-out/$arch/stripped/"*; do
-            if [ -f "$exe" ] && [ -x "$exe" ]; then
-                bn=$(basename "$exe")
-                cp "$exe" "$UPX_DIR/$bn"
-                ./upx --best "$UPX_DIR/$bn" 2>/dev/null || {
-                    echo "  UPX: $bn (skipped)"
-                    rm -f "$UPX_DIR/$bn"
-                }
-            fi
-        done
-        echo "UPX compression complete."
+    # UPX compression only runs in clean builds (--clean), since the
+    # compression step is time-consuming and unnecessary for iteration.
+    if [ "$BUILD_CLEAN" = "true" ]; then
+        UPX_DIR="libbpf-tools-out/$arch/upx"
+        mkdir -p "$UPX_DIR"
+        if [ -f "./upx" ]; then
+            echo "Compressing with UPX for $arch..."
+            for exe in "libbpf-tools-out/$arch/stripped/"*; do
+                if [ -f "$exe" ] && [ -x "$exe" ]; then
+                    bn=$(basename "$exe")
+                    cp "$exe" "$UPX_DIR/$bn"
+                    ./upx --best "$UPX_DIR/$bn" 2>/dev/null || {
+                        echo "  UPX: $bn (skipped)"
+                        rm -f "$UPX_DIR/$bn"
+                    }
+                fi
+            done
+            echo "UPX compression complete."
+        else
+            echo "UPX not available, skipping compression."
+        fi
     else
-        echo "UPX not available, skipping compression."
+        echo "Incremental build — skipping UPX compression for $arch."
     fi
 
     echo "---------------------------------"
 done
 
 # ---------------------------------------------------------------------------
-# Size comparison summary
+# Size comparison summary (only meaningful after a clean build with UPX)
 # ---------------------------------------------------------------------------
 
-if [ -f "./upx" ]; then
+if [ "$BUILD_CLEAN" = "true" ] && [ -f "./upx" ]; then
     echo ""
     echo "=== Size comparison (stripped vs UPX) ==="
     for arch in $TARGET_ARCHS; do
