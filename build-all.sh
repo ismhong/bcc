@@ -32,14 +32,17 @@ Multi-arch Docker cross-build for libbpf-tools (arm64, x86_64).
 Default target is arm64. Use --arch to build for a different target.
 
 Options:
-  -h, --help      Show this help message and exit
-  --arch <arch>   Target architecture(s). Default: arm64.
-                  Examples: --arch x86_64, --arch "arm64 x86_64"
-  --clean         Full clean build (make clean before compile).
-                  Also runs UPX compression for release binaries.
-                  Default: incremental build (only recompiles changed files).
-  --rebuild       Force rebuild of Docker images, even if already cached locally
-  --no-rebuild    (deprecated) No-op; auto-detect now skips images if present
+  -h, --help               Show this help message and exit
+  --arch <arch>            Target architecture(s). Default: arm64.
+                           Examples: --arch x86_64, --arch "arm64 x86_64"
+  --clean                  Full clean build (make clean before compile).
+                           Also runs UPX compression for release binaries.
+                           Default: incremental build (only recompiles changed files).
+  --rebuild                Force rebuild of Docker images, even if already cached locally
+  --no-rebuild             (deprecated) No-op; auto-detect now skips images if present
+  --no-platform-check      Disable the Realtek-platform guard in compiled binaries.
+                           By default, libbpf-tools-box only runs on Realtek RTD
+                           platforms. This flag removes that restriction.
 
 How it works:
   1. Builds Docker images for each target arch (auto-skipped if already present).
@@ -78,34 +81,49 @@ BUILD_CLEAN=false
 # Default target architecture. Override with --arch.
 TARGET_ARCHS="arm64"
 
-# Handle flags
-case "$1" in
-    -h|--help)
-        show_help
-        ;;
-    --arch)
-        shift
-        if [ -z "$1" ]; then
-            echo "Error: --arch requires an argument (e.g., --arch x86_64)"
-            exit 1
-        fi
-        TARGET_ARCHS="$1"
-        echo "Build target(s): $TARGET_ARCHS"
-        ;;
-    --clean)
-        BUILD_CLEAN=true
-        echo "Clean build enabled — will run make clean inside container."
-        ;;
-    --rebuild)
-        FORCE_REBUILD=true
-        echo "Force rebuild enabled — will rebuild Docker images."
-        ;;
-    --no-rebuild)
-        # Backward compat: this flag meant "don't rebuild", but auto-detect
-        # already does that. Just proceed without rebuilding.
-        echo "Note: --no-rebuild is deprecated. Auto-detect handles this automatically."
-        ;;
-esac
+# Default: platform check included. Pass --no-platform-check to disable
+# the Realtek-platform guard in the compiled binary.
+NO_PLATFORM_CHECK=false
+
+# Handle flags (while loop so multiple flags can be combined)
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            ;;
+        --arch)
+            shift
+            if [ -z "$1" ]; then
+                echo "Error: --arch requires an argument (e.g., --arch x86_64)"
+                exit 1
+            fi
+            TARGET_ARCHS="$1"
+            echo "Build target(s): $TARGET_ARCHS"
+            ;;
+        --clean)
+            BUILD_CLEAN=true
+            echo "Clean build enabled — will run make clean inside container."
+            ;;
+        --rebuild)
+            FORCE_REBUILD=true
+            echo "Force rebuild enabled — will rebuild Docker images."
+            ;;
+        --no-rebuild)
+            # Backward compat: this flag meant "don't rebuild", but auto-detect
+            # already does that. Just proceed without rebuilding.
+            echo "Note: --no-rebuild is deprecated. Auto-detect handles this automatically."
+            ;;
+        --no-platform-check)
+            NO_PLATFORM_CHECK=true
+            echo "Platform check disabled — will compile without Realtek platform guard."
+            ;;
+        *)
+            echo "Error: unknown option '$1'"
+            show_help
+            ;;
+    esac
+    shift
+done
 
 #
 # UPX compression support — download and cache upx binary for the host arch.
@@ -227,6 +245,7 @@ for arch in $TARGET_ARCHS; do
         -e "UID=$(id -u)" \
         -e "GID=$(id -g)" \
         -e "BUILD_CLEAN=$BUILD_CLEAN" \
+        -e "NO_PLATFORM_CHECK=$NO_PLATFORM_CHECK" \
         "bcc-builder-$arch"
 
     echo "Build for $arch complete. Verifying output..."
