@@ -48,8 +48,15 @@ if [ -f "bpftool/src/gen.c" ]; then
     sed -i '1i#include <libgen.h>' bpftool/src/gen.c
 fi
 
-# Clean previous build artifacts to ensure fresh cross-arch build
-make clean ARCH=$ARCH 2>/dev/null || true
+# Clean previous build artifacts when BUILD_CLEAN=true (default for CI).
+# When BUILD_CLEAN is unset or false, skip clean for incremental builds
+# — make only recompiles files whose sources have changed.
+if [ "$BUILD_CLEAN" = "true" ]; then
+    echo "BUILD_CLEAN=true: running make clean for libbpf-tools..."
+    make clean ARCH=$ARCH 2>/dev/null || true
+else
+    echo "Incremental build — skipping make clean for libbpf-tools."
+fi
 
 # Build tools with -k (keep going) so individual BPF compilation failures
 # on a given architecture don't stop the rest of the build. Tools whose
@@ -85,8 +92,12 @@ done
 # Build the single multi-call binary
 echo "Building libbpf-tools-multi binary..."
 cd /app/libbpf-tools-multi
-# Clean previous multi-call build artifacts
-make clean 2>/dev/null || true
+if [ "$BUILD_CLEAN" = "true" ]; then
+    echo "BUILD_CLEAN=true: running make clean for multi-call binary..."
+    make clean 2>/dev/null || true
+else
+    echo "Incremental build — skipping make clean for multi-call binary."
+fi
 make ARCH=$ARCH -j$(nproc)
 cp libbpf-tools-box /app/out/debug/libbpf-tools-box
 strip -s libbpf-tools-box -o /app/out/stripped/libbpf-tools-box 2>/dev/null || {

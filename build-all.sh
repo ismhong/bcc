@@ -6,7 +6,8 @@ set -e
 # build-all.sh — Multi-arch Docker cross-build for libbpf-tools
 #
 # Usage:
-#   ./build-all.sh                    Auto-detect: rebuild image only if missing
+#   ./build-all.sh                    Incremental build (skip make clean)
+#   ./build-all.sh --clean            Full clean build (CI, cross-arch switch)
 #   ./build-all.sh --rebuild          Force rebuild Docker images
 #   ./build-all.sh --no-rebuild       Deprecated compat alias for auto-detect
 #   ./build-all.sh -h, --help         Show this help message
@@ -30,20 +31,27 @@ Multi-arch Docker cross-build for libbpf-tools (arm64, x86_64).
 
 Options:
   -h, --help      Show this help message and exit
+  --clean         Full clean build (make clean before compile).
+                  Use for CI or when switching target architectures.
+                  Default: incremental build (only recompiles changed files).
   --rebuild       Force rebuild of Docker images, even if already cached locally
   --no-rebuild    (deprecated) No-op; auto-detect now skips images if present
 
 How it works:
   1. Builds Docker images for each target arch (auto-skipped if already present).
-  2. Runs the build container for each arch via build.sh (always recompiles).
+  2. Runs the build container for each arch via build.sh.
+     By default, build artifacts are reused across runs — only changed files
+     are recompiled. Pass --clean for a pristine rebuild.
   3. Strips, UPX-compresses, and summarizes output in libbpf-tools-out/<arch>/.
 
 Environment:
   The build container mounts the repo root as /app, so source changes are
-  picked up on every run (build.sh does 'make clean' first).
+  picked up on every run. Build artifacts persist in the mounted .output/
+  directories for incremental builds.
 
 Examples:
-  ./build-all.sh              Normal build (fast if images already exist)
+  ./build-all.sh              Incremental build (fast iteration)
+  ./build-all.sh --clean      Full clean build (CI or cross-arch switch)
   ./build-all.sh --rebuild    Rebuild images after Dockerfile changes
 EOF
     exit 0
@@ -56,10 +64,18 @@ trap 'echo ""; echo "Interrupted — exiting."; exit 130' INT
 
 FORCE_REBUILD=false
 
+# Default: incremental build (skip make clean in container).
+# Pass --clean for a pristine rebuild (CI or cross-arch switch).
+BUILD_CLEAN=false
+
 # Handle flags
 case "$1" in
     -h|--help)
         show_help
+        ;;
+    --clean)
+        BUILD_CLEAN=true
+        echo "Clean build enabled — will run make clean inside container."
         ;;
     --rebuild)
         FORCE_REBUILD=true
@@ -179,8 +195,8 @@ for arch in $TARGET_ARCHS; do
 
     echo "Running build container for $arch..."
     # Run the build container.
-    # NOTE: build.sh always runs "make clean" first, so source changes are
-    # always picked up. The Docker image merely provides the build toolchain.
+    # NOTE: build artifacts persist in .output/ (volume mount), so make
+    #       only recompiles changed files unless --clean was passed.
     #       --init injects tini as PID 1 so Ctrl+C (SIGTERM) is properly
     #       forwarded to build.sh instead of being ignored by sh's PID 1.
     docker run --rm --init --platform "$platform" \
@@ -188,6 +204,7 @@ for arch in $TARGET_ARCHS; do
         -v "$(pwd)/libbpf-tools-out/$arch:/app/out" \
         -e "UID=$(id -u)" \
         -e "GID=$(id -g)" \
+        -e "BUILD_CLEAN=$BUILD_CLEAN" \
         "bcc-builder-$arch"
 
     echo "Build for $arch complete. Verifying output..."
