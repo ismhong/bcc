@@ -16,6 +16,19 @@ WRAPPERS_DIR := $(OUTPUT)/wrappers
 # Reuse build artifacts from ../libbpf-tools/.output
 LIBBPF_OBJ  := $(LIBBPF_TOOLS)/.output/libbpf.a
 
+# Quiet / summary mode — mirrors libbpf-tools/Makefile but uses 'M-' prefix
+# to distinguish multi-call build steps from individual tool builds.
+V ?= 0
+ifeq ($(V),0)
+  Q = @
+  msg = @printf '  %-8s %s%s\n' "$(M)$(1)" "$(notdir $(2))" "$(if $(3), $(3))";
+  M = M-
+else
+  Q =
+  msg = @true
+  M =
+endif
+
 ARCH ?= $(shell uname -m | sed 's/x86_64/x86/' | sed 's/aarch64/arm64/' \
 		 | sed 's/ppc64le/powerpc/' | sed 's/mips.*/mips/' \
 		 | sed 's/riscv64/riscv/' | sed 's/loongarch.*/loongarch/' \
@@ -173,7 +186,8 @@ prereq:
 
 # Create output directories
 $(OUTPUT) $(WRAPPERS_DIR):
-	mkdir -p $@
+	$(call msg,MKDIR,$@)
+	$(Q)mkdir -p $@
 
 # Generate a thin wrapper .c for each tool.
 # #defines rename conflicting non-static globals before #include-ing the tool .c.
@@ -187,7 +201,8 @@ $(OUTPUT) $(WRAPPERS_DIR):
 #   handle_lost_events      → TOOL_handle_lost_events
 #   libbpf_print_fn         → TOOL_libbpf_print_fn
 $(WRAPPERS_DIR)/%.c: $(LIBBPF_TOOLS)/%.c | $(WRAPPERS_DIR)
-	@TOOL=$*; \
+	$(call msg,WRAP,$@)
+	$(Q)TOOL=$*; \
 	printf '/* Auto-generated wrapper for %s — DO NOT EDIT */\n' "$$TOOL" > $@; \
 	printf '#define main                     %s_main\n' "$$TOOL" >> $@; \
 	printf '#define argp_program_version     %s_argp_version\n' "$$TOOL" >> $@; \
@@ -206,19 +221,23 @@ $(WRAPPERS_DIR)/%.c: $(LIBBPF_TOOLS)/%.c | $(WRAPPERS_DIR)
 
 # Compile a wrapper .o (depends on the corresponding skel.h from libbpf-tools build)
 $(TOOL_OBJS): $(OUTPUT)/%.o: $(WRAPPERS_DIR)/%.c $(LIBBPF_TOOLS)/.output/%.skel.h | $(OUTPUT)
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(call msg,CC,$@)
+	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # Compile common helper .o files from libbpf-tools/*.c
 $(COMMON_OBJ): $(OUTPUT)/%.o: $(LIBBPF_TOOLS)/%.c | $(OUTPUT)
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(call msg,COMMON,$@)
+	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # Compile the dispatcher
 $(OUTPUT)/dispatch.o: dispatch.c | $(OUTPUT)
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(call msg,CC,$@)
+	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # Final link: dispatcher + all tool wrappers + shared helpers + libbpf.a
 libbpf-tools-box: $(OUTPUT)/dispatch.o $(TOOL_OBJS) $(COMMON_OBJ) $(LIBBPF_OBJ)
-	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
+	$(call msg,LINK,$@)
+	$(Q)$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
 clean:
 	rm -rf $(OUTPUT) libbpf-tools-box
