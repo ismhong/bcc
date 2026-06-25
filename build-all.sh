@@ -2,11 +2,76 @@
 
 set -e
 
-REBUILD_IMAGE=true
-if [ "$1" = "--no-rebuild" ]; then
-    echo "Skipping image rebuild."
-    REBUILD_IMAGE=false
-fi
+# ---------------------------------------------------------------------------
+# build-all.sh — Multi-arch Docker cross-build for libbpf-tools
+#
+# Usage:
+#   ./build-all.sh                    Auto-detect: rebuild image only if missing
+#   ./build-all.sh --rebuild          Force rebuild Docker images
+#   ./build-all.sh --no-rebuild       Deprecated compat alias for auto-detect
+#   ./build-all.sh -h, --help         Show this help message
+#
+# How Docker image caching works:
+#   - The script checks if the bcc-builder image exists locally.
+#     If it does, it skips "docker buildx build" entirely — just runs the container.
+#   - The buildx builder is PERSISTENT (named "bcc-multiarch-builder"), not deleted
+#     on exit. Its BuildKit cache survives across runs, so even when --rebuild is
+#     needed, the "RUN apk add" layer hits the cache.
+#   - For CI: on a fresh node the image doesn't exist → gets built once, then
+#     cached by the Docker daemon. To optimize CI further, pre-push images to a
+#     registry.
+# ---------------------------------------------------------------------------
+
+# --help / -h: show usage and exit
+show_help() {
+    cat <<'EOF'
+Usage: ./build-all.sh [OPTION]
+
+Multi-arch Docker cross-build for libbpf-tools (armhf).
+
+Options:
+  -h, --help      Show this help message and exit
+  --rebuild       Force rebuild of Docker image, even if already cached locally
+  --no-rebuild    (deprecated) No-op; auto-detect now skips images if present
+
+How it works:
+  1. Builds the Docker image for the target arch (auto-skipped if already present).
+  2. Runs the build container via build.sh (always recompiles).
+  3. Strips, UPX-compresses, and summarizes output in libbpf-tools-out/<arch>/.
+
+Environment:
+  The build container mounts the repo root as /app, so source changes are
+  picked up on every run (build.sh does 'make clean' first).
+
+Examples:
+  ./build-all.sh              Normal build (fast if image already exists)
+  ./build-all.sh --rebuild    Rebuild image after Dockerfile changes
+EOF
+    exit 0
+}
+
+# Ensure Ctrl+C reliably terminates the script.
+# Without this trap, a non-interactive shell may continue past an interrupted
+# child process, leaving the build running.
+trap 'echo ""; echo "Interrupted — exiting."; exit 130' INT
+
+FORCE_REBUILD=false
+
+# Handle flags
+case "$1" in
+    -h|--help)
+        show_help
+        ;;
+    --rebuild)
+        FORCE_REBUILD=true
+        echo "Force rebuild enabled — will rebuild Docker image."
+        ;;
+    --no-rebuild)
+        # Backward compat: this flag meant "don't rebuild", but auto-detect
+        # already does that. Just proceed without rebuilding.
+        echo "Note: --no-rebuild is deprecated. Auto-detect handles this automatically."
+        ;;
+esac
 
 #
 # UPX compression support — download and cache upx binary for the host arch.
@@ -41,19 +106,65 @@ InstallUpx() {
 
 InstallUpx
 
-if [ "$REBUILD_IMAGE" = true ]; then
+TARGET_ARCHS="armhf"
+
+# ---------------------------------------------------------------------------
+# Docker image build phase — only when needed
+# ---------------------------------------------------------------------------
+
+# Check which architectures need a new image
+NEED_BUILD=false
+for arch in $TARGET_ARCHS; do
+    if ! docker image inspect "bcc-builder-$arch" >/dev/null 2>&1; then
+        echo "Image bcc-builder-$arch not found locally — will build."
+        NEED_BUILD=true
+    fi
+done
+
+if [ "$FORCE_REBUILD" = true ] || [ "$NEED_BUILD" = true ]; then
     # Ensure QEMU binfmt interpreters are registered.
     # This allows Docker to run containers for different architectures.
-    docker run --rm --privileged tonistiigi/binfmt --install all
+    # The check avoids re-running the privileged container if already registered.
+    if ! ls /proc/sys/fs/binfmt_misc/qemu-* >/dev/null 2>&1; then
+        echo "Registering QEMU binfmt interpreters..."
+        docker run --rm --privileged tonistiigi/binfmt --install all
+    else
+        echo "QEMU binfmt interpreters already registered."
+    fi
 
-    # Create a new builder with host networking to solve DNS issues
-    docker buildx create --use --name temp-builder --driver-opt network=host
+    # Use a PERSISTENT builder — its BuildKit container and cache volume
+    # survive across script runs, so layers stay cached.
+    BUILDER_NAME="bcc-multiarch-builder"
+    if docker buildx ls 2>/dev/null | grep -q "$BUILDER_NAME"; then
+        echo "Reusing existing buildx builder '$BUILDER_NAME' (cache preserved)."
+        docker buildx use "$BUILDER_NAME"
+    else
+        echo "Creating persistent buildx builder '$BUILDER_NAME'..."
+        docker buildx create --use --name "$BUILDER_NAME" --driver-opt network=host
+    fi
 
-    # Trap to ensure builder is cleaned up on exit
-    trap 'docker buildx rm temp-builder' EXIT
+    for arch in $TARGET_ARCHS; do
+        # Map architecture name to Docker platform
+        case "$arch" in
+            armhf) platform="linux/arm/v7" ;;
+            *)     platform="linux/$arch" ;;
+        esac
+
+        echo "Building Docker image for $arch (platform: $platform)..."
+        # BuildKit cache from the persistent builder means:
+        #   - "FROM alpine:3.17"    → cached (layer already exists)
+        #   - "RUN apk add ..."     → cached (layers from previous build)
+        #   - "WORKDIR /app"        → cached
+        # Only the first build (or --rebuild) actually runs anything.
+        docker buildx build --load --platform "$platform" -t "bcc-builder-$arch" .
+    done
+else
+    echo "Docker image already exists — skipping image build."
 fi
 
-TARGET_ARCHS="armhf"
+# ---------------------------------------------------------------------------
+# Build execution phase — run build containers for each target arch
+# ---------------------------------------------------------------------------
 
 for arch in $TARGET_ARCHS; do
     # Map architecture name to Docker platform
@@ -62,18 +173,16 @@ for arch in $TARGET_ARCHS; do
         *)     platform="linux/$arch" ;;
     esac
 
-    if [ "$REBUILD_IMAGE" = true ]; then
-        echo "Building for $arch (platform: $platform)..."
-        # Use docker buildx to build for different platforms
-        docker buildx build --load --platform "$platform" -t "bcc-builder-$arch" .
-    fi
-
     # Create output directory for the architecture
     mkdir -p "libbpf-tools-out/$arch"
 
     echo "Running build container for $arch..."
-    # Run the build container
-    docker run --rm --platform "$platform" \
+    # Run the build container.
+    # NOTE: build.sh always runs "make clean" first, so source changes are
+    # always picked up. The Docker image merely provides the build toolchain.
+    #       --init injects tini as PID 1 so Ctrl+C (SIGTERM) is properly
+    #       forwarded to build.sh instead of being ignored by sh's PID 1.
+    docker run --rm --init --platform "$platform" \
         -v "$(pwd):/app" \
         -v "$(pwd)/libbpf-tools-out/$arch:/app/out" \
         -e "UID=$(id -u)" \
@@ -106,7 +215,10 @@ for arch in $TARGET_ARCHS; do
     echo "---------------------------------"
 done
 
-# Print size comparison summary
+# ---------------------------------------------------------------------------
+# Size comparison summary
+# ---------------------------------------------------------------------------
+
 if [ -f "./upx" ]; then
     echo ""
     echo "=== Size comparison (stripped vs UPX) ==="
