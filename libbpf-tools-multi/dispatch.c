@@ -3,10 +3,15 @@
 // Allows a single binary to serve as all 91 libbpf-tools via busybox-style
 // symlinks or direct invocation: libbpf-tools-box <toolname> [args...].
 
-#include <libgen.h>
+#define _GNU_SOURCE
+#include <argp.h>
+#include <errno.h>
+#include <limits.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 /* Forward declarations — one per tool.
  * Each tool's main() is renamed to TOOL_main() by the wrapper .c.
@@ -207,29 +212,181 @@ static const struct tool_entry tools[] = {
 
 #define MAX_TOOL_NAME_LEN 24
 
-static void print_usage(const char *prog)
+static void list_tools(void)
 {
-	fprintf(stderr, "Usage: %s <tool> [args...]\n\n", prog);
-	fprintf(stderr, "For detailed documentation and examples, see:\n");
-	fprintf(stderr, "  https://processor.realtek.com/bpf/bpftools.html\n\n");
-	fprintf(stderr, "Available tools:\n");
-		for (const struct tool_entry *t = tools; t->name; t++) {
-			if (!t->fn) /* skip tools not compiled on this branch */
-				continue;
-			fprintf(stderr, "  %-*s %s\n", MAX_TOOL_NAME_LEN, t->name, t->desc);
+	for (const struct tool_entry *t = tools; t->name; t++) {
+		if (t->fn)
+			printf("%s\n", t->name);
+	}
+}
+
+static int install_tools(const char *self, int argc, char **argv)
+{
+	int use_symlink = 1;  /* default: symbolic links */
+	int force = 0;
+	int verbose = 0;
+	const char *target_dir = NULL;
+	char self_path[PATH_MAX];
+	const char *resolved;
+	struct stat st;
+	int i;
+
+	/* Parse options — loop over remaining args after --install */
+	for (i = 0; i < argc; i++) {
+		if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--symbolic") == 0) {
+			use_symlink = 1;
+		} else if (strcmp(argv[i], "-H") == 0 || strcmp(argv[i], "--hardlink") == 0) {
+			use_symlink = 0;
+		} else if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--force") == 0) {
+			force = 1;
+		} else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
+			verbose = 1;
+		} else if (argv[i][0] == '-') {
+			fprintf(stderr, "Unknown option: %s\n", argv[i]);
+			fprintf(stderr, "Usage: libbpf-tools-box --install [-s] [-H] [-f] [-v] <dir>\n");
+			return 1;
+		} else {
+			target_dir = argv[i];
 		}
+	}
+
+	if (!target_dir) {
+		fprintf(stderr, "Usage: libbpf-tools-box --install [-s] [-H] [-f] [-v] <dir>\n");
+		return 1;
+	}
+
+	/* Resolve self path (the libbpf-tools-box binary) */
+	if (realpath(self, self_path)) {
+		resolved = self_path;
+	} else if (self[0] == '/') {
+		resolved = self;
+	} else {
+		fprintf(stderr, "Cannot resolve path to '%s'. Use an absolute path.\n", self);
+		return 1;
+	}
+
+	/* Verify target directory exists */
+	if (stat(target_dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
+		fprintf(stderr, "Target directory '%s' does not exist or is not a directory.\n",
+			target_dir);
+		return 1;
+	}
+
+	/* Create links for each tool */
+	int ret = 0;
+	for (const struct tool_entry *t = tools; t->name; t++) {
+		char link_path[PATH_MAX];
+		int n;
+
+		if (!t->fn)
+			continue;
+
+		n = snprintf(link_path, sizeof(link_path), "%s/%s", target_dir, t->name);
+		if (n < 0 || n >= (int)sizeof(link_path)) {
+			fprintf(stderr, "  SKIP %s (path too long)\n", t->name);
+			ret = 1;
+			continue;
+		}
+
+		/* Remove existing entry if --force */
+		if (force)
+			unlink(link_path);
+
+		/* Create the link */
+		int rc = use_symlink ? symlink(resolved, link_path)
+				    : link(resolved, link_path);
+		int saved_errno = errno;
+
+		if (rc == 0) {
+			if (verbose)
+				printf("  %s %s\n",
+				       use_symlink ? "SYMLINK" : "HARDLINK",
+				       link_path);
+		} else {
+			if (saved_errno == EEXIST) {
+				if (verbose)
+					fprintf(stderr, "  SKIP  %s (already exists)\n",
+						link_path);
+			} else {
+				fprintf(stderr, "  FAIL  %s: %s\n",
+					link_path, strerror(saved_errno));
+				ret = 1;
+			}
+		}
+	}
+
+	return ret;
+}
+
+static const struct argp_option dispatch_opts[] = {
+	{ "list", 0, NULL, 0, "List all available tool names", 0 },
+	{ "install", 0, "DIR", 0, "Install symlinks/hardlinks for all tools in DIR", 0 },
+	{ "symbolic", 0, NULL, 0, "Create symbolic links (with --install, default)", 0 },
+	{ "hardlink", 0, NULL, 0, "Create hardlinks instead (with --install)", 0 },
+	{ "force", 0, NULL, 0, "Overwrite existing files/links (with --install)", 0 },
+	{ "verbose", 0, NULL, 0, "Print each link being created (with --install)", 0 },
+	{ NULL, 0, NULL, 0, NULL, 0 }
+};
+
+static const char dispatch_args_doc[] = "[--install [OPTIONS] DIR | --list | <tool> [args...]]";
+static const char dispatch_doc[] =
+	"Busybox-style multi-call binary for all libbpf-tools.\v"
+	"Examples:\n"
+	"  libbpf-tools-box opensnoop                    Trace open syscalls\n"
+	"  libbpf-tools-box --list                       List all tool names\n"
+	"  libbpf-tools-box --install -f /usr/local/bin  Install all symlinks\n"
+	"  libbpf-tools-box --install -fv /data/bcc/bin  Force + verbose\n"
+	"\n"
+	"See <tool> --help for per-tool documentation.\n"
+	"For more details, visit:\n"
+	"  https://processor.realtek.com/bpf/bpftools.html";
+
+static const struct argp dispatch_argp = {
+	.options = dispatch_opts,
+	.parser = NULL,
+	.args_doc = dispatch_args_doc,
+	.doc = dispatch_doc,
+};
+
+static void print_usage(FILE *stream, const char *prog)
+{
+	argp_help(&dispatch_argp, stream, ARGP_HELP_STD_USAGE | ARGP_HELP_LONG | ARGP_HELP_DOC, (char *)prog);
+	fprintf(stream, "\nAvailable tools:\n");
+	for (const struct tool_entry *t = tools; t->name; t++) {
+		if (!t->fn) /* skip tools not compiled on this branch */
+			continue;
+		fprintf(stream, "  %-*s %s\n", MAX_TOOL_NAME_LEN, t->name, t->desc);
+	}
 }
 
 int main(int argc, char **argv)
 {
 	const char *prog = argv[0];
+	const char *orig_argv0 = argv[0];
 	const char *tool_name;
-	char *bn = basename(argv[0]);
+	const char *bn = strrchr(prog, '/');
+
+	bn = bn ? bn + 1 : prog;
+
+	/* Special built-in flags (only when invoked as libbpf-tools-box directly) */
+	if (strcmp(bn, "libbpf-tools-box") == 0 && argc >= 2) {
+		if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
+			print_usage(stdout, prog);
+			return 0;
+		}
+		if (strcmp(argv[1], "--list") == 0) {
+			list_tools();
+			return 0;
+		}
+		if (strcmp(argv[1], "--install") == 0) {
+			return install_tools(orig_argv0, argc - 2, argv + 2);
+		}
+	}
 
 	/* If invoked as libbpf-tools-box directly, use argv[1] as tool name */
 	if (strcmp(bn, "libbpf-tools-box") == 0) {
 		if (argc < 2) {
-			print_usage(prog);
+			print_usage(stderr, prog);
 			return 1;
 		}
 		tool_name = argv[1];

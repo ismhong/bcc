@@ -71,13 +71,61 @@ make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf-
 
 ### Busybox 符號鏈接風格
 
+一條指令建立所有工具的**符號鏈接**：
+
 ```bash
-for tool in $(./libbpf-tools-box 2>&1 | grep '  ' | awk '{print $1}'); do
-    ln -sf libbpf-tools-box "$tool"
-done
+./libbpf-tools-box --install -f /usr/local/bin
 ./opensnoop
 ./softirqs 1 5
 ```
+
+或在編譯後直接使用 `make install`：
+
+```bash
+make install DESTDIR=/usr/local/bin
+```
+
+詳細選項請參閱 [`--install`](#--install)。
+
+### --list
+
+列出所有可用的工具名稱（每行一個，適合腳本使用）：
+
+```bash
+./libbpf-tools-box --list
+argdist
+bashreadline
+bindsnoop
+...
+```
+
+### --install
+
+在目標目錄中為所有工具建立符號鏈接（或硬鏈接）：
+
+```bash
+# 建立符號鏈接（預設）
+./libbpf-tools-box --install /usr/local/bin
+
+# 硬鏈接（同一 filesystem，節省空間）
+./libbpf-tools-box --install -H /usr/local/bin
+
+# 強制覆蓋已存在的鏈接
+./libbpf-tools-box --install -f /usr/local/bin
+
+# 詳細模式 — 顯示每個鏈接的建立過程
+./libbpf-tools-box --install -v -f /data/bcc/bin
+```
+
+選項說明：
+
+| 旗標 | 長格式 | 說明 |
+|---|---|---|
+| *(預設)* | | 建立符號鏈接 |
+| `-s` | `--symbolic` | 明確指定符號鏈接（同預設） |
+| `-H` | `--hardlink` | 建立硬鏈接 |
+| `-f` | `--force` | 強制覆蓋已存在的檔案/鏈接 |
+| `-v` | `--verbose` | 顯示每個鏈接的建立過程 |
 
 ### 在 Android 上使用
 
@@ -86,6 +134,12 @@ adb push libbpf-tools-box /data/libbpf-tools-box
 adb shell "chmod +x /data/libbpf-tools-box"
 adb shell "/data/libbpf-tools-box opensnoop"
 adb shell "/data/libbpf-tools-box --btf /data/vmlinux softirqs 1 2"
+
+# 在裝置上安裝所有符號鏈接
+adb shell "mkdir -p /data/bcc/bin"
+adb shell "/data/libbpf-tools-box --install -f /data/bcc/bin"
+adb shell "ls -l /data/bcc/bin/opensnoop"
+# → lrwxrwxrwx ... /data/bcc/bin/opensnoop -> /data/libbpf-tools-box
 ```
 
 ---
