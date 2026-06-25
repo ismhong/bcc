@@ -42,6 +42,10 @@ endef
 $(call allow-override,CC,$(CROSS_COMPILE)cc)
 
 CFLAGS := -g -O2 -Wall -Wmissing-field-initializers
+# Allow extra flags from environment (e.g. -DNO_PLATFORM_CHECK)
+ifneq ($(EXTRA_CFLAGS),)
+CFLAGS += $(EXTRA_CFLAGS)
+endif
 # Include headers from libbpf-tools/.output (skeletons, libbpf headers, etc.)
 INCLUDES := -I$(LIBBPF_TOOLS)/.output \
             -I$(LIBBPF_TOOLS) \

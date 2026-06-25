@@ -23,12 +23,21 @@ case "$UNAME_M" in
     *)       ARCH=$UNAME_M ;;
 esac
 
+# If NO_PLATFORM_CHECK is set, disable the Realtek-platform guard in compiled
+# binaries. The platform_check() constructor (in trace_helpers.h) is guarded by
+# #ifndef NO_PLATFORM_CHECK, so passing -DNO_PLATFORM_CHECK omits it entirely.
+if [ "$NO_PLATFORM_CHECK" = "true" ]; then
+    echo "NO_PLATFORM_CHECK enabled — skipping platform checks in binaries."
+    EXTRA_CFLAGS="-DNO_PLATFORM_CHECK"
+    export EXTRA_CFLAGS
+fi
+
 # For 32-bit ARM (armhf), add extra compiler flags to suppress warnings
 # that -Werror in the upstream libbpf-tools Makefile would otherwise promote
 # to errors (especially int/pointer cast and implicit int conversion issues
 # that arise from 32-bit vs 64-bit differences).
 if [ "$ARCH" = "arm" ]; then
-    export EXTRA_CFLAGS="-Wno-sign-compare \
+    export EXTRA_CFLAGS="$EXTRA_CFLAGS -Wno-sign-compare \
       -Wno-missing-field-initializers \
       -Wno-int-to-pointer-cast \
       -Wno-int-conversion \
