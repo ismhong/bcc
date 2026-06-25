@@ -36,10 +36,12 @@ Options:
   --arch <arch>            Target architecture(s). Default: arm64.
                            Examples: --arch x86_64, --arch "arm64 x86_64"
   --clean                  Full clean build (make clean before compile).
-                           Also runs UPX compression for release binaries.
                            Default: incremental build (only recompiles changed files).
   --rebuild                Force rebuild of Docker images, even if already cached locally
   --no-rebuild             (deprecated) No-op; auto-detect now skips images if present
+  --upx                    Enable UPX compression of release binaries.
+                           Default: UPX is skipped entirely; this flag is required
+                           for compression regardless of --clean.
   --no-platform-check      Disable the Realtek-platform guard in compiled binaries.
                            By default, libbpf-tools-box only runs on Realtek RTD
                            platforms. This flag removes that restriction.
@@ -49,8 +51,7 @@ How it works:
   2. Runs the build container for each arch via build.sh.
      By default, build artifacts are reused across runs — only changed files
      are recompiled. Pass --clean for a pristine rebuild.
-  3. Strips executables. UPX compression and size summary only run in
-     clean builds (--clean), since they are time-consuming.
+  3. Strips executables. UPX compression is optional (pass --upx to enable).
 
 Environment:
   The build container mounts the repo root as /app, so source changes are
@@ -85,6 +86,9 @@ TARGET_ARCHS="arm64"
 # the Realtek-platform guard in the compiled binary.
 NO_PLATFORM_CHECK=false
 
+# Default: UPX compression off (only runs with --clean or --upx).
+DO_UPX=false
+
 # Handle flags (while loop so multiple flags can be combined)
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -112,6 +116,10 @@ while [ $# -gt 0 ]; do
             # Backward compat: this flag meant "don't rebuild", but auto-detect
             # already does that. Just proceed without rebuilding.
             echo "Note: --no-rebuild is deprecated. Auto-detect handles this automatically."
+            ;;
+        --upx)
+            DO_UPX=true
+            echo "UPX compression enabled."
             ;;
         --no-platform-check)
             NO_PLATFORM_CHECK=true
@@ -156,11 +164,11 @@ InstallUpx() {
     chmod +x ./upx
 }
 
-# Only download UPX for clean builds — incremental builds skip compression.
-if [ "$BUILD_CLEAN" = "true" ]; then
+# Download UPX only when --upx is explicitly requested
+if [ "$DO_UPX" = "true" ]; then
     InstallUpx
 else
-    echo "Incremental build — skipping UPX download."
+    echo "UPX compression not requested (use --upx to enable)."
 fi
 
 # ---------------------------------------------------------------------------
@@ -251,9 +259,8 @@ for arch in $TARGET_ARCHS; do
     echo "Build for $arch complete. Verifying output..."
     file "libbpf-tools-out/$arch/stripped/bashreadline"
 
-    # UPX compression only runs in clean builds (--clean), since the
-    # compression step is time-consuming and unnecessary for iteration.
-    if [ "$BUILD_CLEAN" = "true" ]; then
+    # UPX compression: only runs when --upx is explicitly requested
+    if [ "$DO_UPX" = "true" ]; then
         UPX_DIR="libbpf-tools-out/$arch/upx"
         mkdir -p "$UPX_DIR"
         if [ -f "./upx" ]; then
@@ -273,7 +280,7 @@ for arch in $TARGET_ARCHS; do
             echo "UPX not available, skipping compression."
         fi
     else
-        echo "Incremental build — skipping UPX compression for $arch."
+        echo "Incremental build — skipping UPX compression."
     fi
 
     echo "---------------------------------"
@@ -283,7 +290,7 @@ done
 # Size comparison summary (only meaningful after a clean build with UPX)
 # ---------------------------------------------------------------------------
 
-if [ "$BUILD_CLEAN" = "true" ] && [ -f "./upx" ]; then
+if [ "$DO_UPX" = "true" ] && [ -f "./upx" ]; then
     echo ""
     echo "=== Size comparison (stripped vs UPX) ==="
     for arch in $TARGET_ARCHS; do
